@@ -27,11 +27,16 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Make gradlew executable
+      - name: Set gradlew as executable
         run: chmod +x ./gradlew
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
-      - name: Build with Gradle Wrapper (no tests, no jacoco)
-        run: ./gradlew build -x test -x jacocoTestReport
+      - name: Stop any running Gradle daemons
+        run: ./gradlew --stop
+
+      - name: Build with Gradle Wrapper (skip tests and jacoco)
+        run: ./gradlew build -x test -x jacocoTestReport --no-daemon
