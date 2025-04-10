@@ -19,9 +19,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            pkill -f 'java -jar' || true
-            cd /appl
-            rm -f app.jar
-            cp /actions-runner/_work/auth-profile/auth-profile/build/libs/auth-profile-0.0.1-SNAPSHOT.jar app.jar
-            setsid java -jar app.jar > app.log 2>&1 < /dev/null &
-
+            sudo systemctl stop app.service || true
+            cp /actions-runner/_work/auth-profile/auth-profile/build/libs/auth-profile-0.0.1-SNAPSHOT.jar /appl/app.jar
+            sudo systemctl start app.service
+            sudo systemctl status app.service --no-pager
