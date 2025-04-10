@@ -23,4 +23,5 @@ jobs:
             cd /appl
             rm -f app.jar
             cp /actions-runner/_work/auth-profile/auth-profile/build/libs/auth-profile-0.0.1-SNAPSHOT.jar app.jar
-            nohup java -jar app.jar > app.log 2>&1 &
+            setsid java -jar app.jar > app.log 2>&1 < /dev/null &
+
