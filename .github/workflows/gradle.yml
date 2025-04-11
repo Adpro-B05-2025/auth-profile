@@ -39,4 +39,4 @@ jobs:
         run: ./gradlew --stop
 
       - name: Build with Gradle Wrapper (skip tests and jacoco)
-        run: ./gradlew build -x test -x jacocoTestReport --no-daemon
+        run: ./gradlew build -x test -x jacocoTestReport
