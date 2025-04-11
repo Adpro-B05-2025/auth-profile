@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
-import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
