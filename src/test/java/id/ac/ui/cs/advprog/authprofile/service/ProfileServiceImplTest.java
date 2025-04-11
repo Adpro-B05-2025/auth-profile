@@ -9,6 +9,7 @@ import id.ac.ui.cs.advprog.authprofile.model.User;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
+import id.ac.ui.cs.advprog.authprofile.service.impl.ProfileServiceImpl;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class ProfileServiceTest {
+class ProfileServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
@@ -42,7 +43,7 @@ class ProfileServiceTest {
     private CareGiverRepository careGiverRepository;
 
     @InjectMocks
-    private ProfileService profileService;
+    private ProfileServiceImpl profileServiceImpl;
 
     @Mock
     private SecurityContext securityContext;
@@ -132,7 +133,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
 
         // when
-        ProfileResponse response = profileService.getCurrentUserProfile();
+        ProfileResponse response = profileServiceImpl.getCurrentUserProfile();
 
         // then
         assertThat(response).isNotNull();
@@ -151,7 +152,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> profileService.getCurrentUserProfile())
+        assertThatThrownBy(() -> profileServiceImpl.getCurrentUserProfile())
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
@@ -168,7 +169,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
 
         // Call a method that uses getCurrentUserEmail internally
-        ProfileResponse response = profileService.getCurrentUserProfile();
+        ProfileResponse response = profileServiceImpl.getCurrentUserProfile();
 
         // Verify the response is correct
         assertThat(response).isNotNull();
@@ -181,7 +182,7 @@ class ProfileServiceTest {
         when(userRepository.findById(anyLong())).thenReturn(Optional.of(user));
 
         // when
-        ProfileResponse response = profileService.getUserProfile(1L);
+        ProfileResponse response = profileServiceImpl.getUserProfile(1L);
 
         // then
         assertThat(response).isNotNull();
@@ -197,7 +198,7 @@ class ProfileServiceTest {
         when(userRepository.findById(anyLong())).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> profileService.getUserProfile(999L))
+        assertThatThrownBy(() -> profileServiceImpl.getUserProfile(999L))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found with id: 999");
 
@@ -210,7 +211,7 @@ class ProfileServiceTest {
         when(careGiverRepository.findAll()).thenReturn(careGivers);
 
         // when
-        List<ProfileResponse> responses = profileService.getAllCareGivers();
+        List<ProfileResponse> responses = profileServiceImpl.getAllCareGivers();
 
         // then
         assertThat(responses).hasSize(1);
@@ -226,7 +227,7 @@ class ProfileServiceTest {
         when(careGiverRepository.findByNameAndSpeciality("test", "general")).thenReturn(careGivers);
 
         // when
-        List<ProfileResponse> responses = profileService.searchCareGivers("test", "general");
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", "general");
 
         // then
         assertThat(responses).hasSize(1);
@@ -241,7 +242,7 @@ class ProfileServiceTest {
         when(careGiverRepository.findByNameContainingIgnoreCase("test")).thenReturn(careGivers);
 
         // when
-        List<ProfileResponse> responses = profileService.searchCareGivers("test", null);
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", null);
 
         // then
         assertThat(responses).hasSize(1);
@@ -256,7 +257,7 @@ class ProfileServiceTest {
         when(careGiverRepository.findBySpecialityContainingIgnoreCase("general")).thenReturn(careGivers);
 
         // when
-        List<ProfileResponse> responses = profileService.searchCareGivers(null, "general");
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGivers(null, "general");
 
         // then
         assertThat(responses).hasSize(1);
@@ -271,7 +272,7 @@ class ProfileServiceTest {
         when(careGiverRepository.findAll()).thenReturn(careGivers);
 
         // when
-        List<ProfileResponse> responses = profileService.searchCareGivers(null, null);
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGivers(null, null);
 
         // then
         assertThat(responses).hasSize(1);
@@ -290,7 +291,7 @@ class ProfileServiceTest {
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
 
         // when
-        ProfileResponse response = profileService.updateCurrentUserProfile(updateRequest);
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
         // then
         assertThat(response).isNotNull();
@@ -313,7 +314,7 @@ class ProfileServiceTest {
         when(careGiverRepository.save(any(CareGiver.class))).thenReturn(careGiver);
 
         // when
-        ProfileResponse response = profileService.updateCurrentUserProfile(updateRequest);
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
         // then
         assertThat(response).isNotNull();
@@ -337,7 +338,7 @@ class ProfileServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(user);
 
         // when
-        ProfileResponse response = profileService.updateCurrentUserProfile(updateRequest);
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
         // then
         assertThat(response).isNotNull();
@@ -360,7 +361,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
 
         // when
-        profileService.deleteCurrentUserAccount();
+        profileServiceImpl.deleteCurrentUserAccount();
 
         // then
         verify(userRepository).findByEmail("test@example.com");
@@ -376,7 +377,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> profileService.deleteCurrentUserAccount())
+        assertThatThrownBy(() -> profileServiceImpl.deleteCurrentUserAccount())
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
@@ -393,7 +394,7 @@ class ProfileServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> profileService.updateCurrentUserProfile(updateRequest))
+        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
@@ -404,4 +405,3 @@ class ProfileServiceTest {
         verify(careGiverRepository, never()).save(any(CareGiver.class));
     }
 }
-

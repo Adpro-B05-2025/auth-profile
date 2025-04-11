@@ -4,17 +4,16 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
-import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
+import id.ac.ui.cs.advprog.authprofile.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class AuthServiceTest {
+class AuthServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
@@ -63,7 +62,7 @@ class AuthServiceTest {
     private JwtUtils jwtUtils;
 
     @InjectMocks
-    private AuthService authService;
+    private AuthServiceImpl authServiceImpl;
 
     private LoginRequest loginRequest;
     private RegisterPacillianRequest pacillianRequest;
@@ -140,7 +139,7 @@ class AuthServiceTest {
         when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
 
-        JwtResponse response = authService.authenticateUser(loginRequest);
+        JwtResponse response = authServiceImpl.authenticateUser(loginRequest);
 
         assertThat(response).isNotNull();
         assertThat(response.getToken()).isEqualTo("test_jwt_token");
@@ -167,7 +166,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
 
         // When & Then
-        assertThatThrownBy(() -> authService.authenticateUser(loginRequest))
+        assertThatThrownBy(() -> authServiceImpl.authenticateUser(loginRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("User not found");
     }
@@ -181,7 +180,7 @@ class AuthServiceTest {
         when(roleRepository.findByName(Role.ERole.ROLE_PACILLIAN)).thenReturn(Optional.of(pacillianRole));
 
         // when
-        String result = authService.registerPacillian(pacillianRequest);
+        String result = authServiceImpl.registerPacillian(pacillianRequest);
 
         // then
         assertThat(result).isEqualTo("Pacillian registered successfully!");
@@ -199,7 +198,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authService.registerPacillian(pacillianRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Email is already in use");
 
@@ -214,7 +213,7 @@ class AuthServiceTest {
         when(userRepository.existsByNik(pacillianRequest.getNik())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authService.registerPacillian(pacillianRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("NIK is already in use");
 
@@ -232,7 +231,7 @@ class AuthServiceTest {
         when(roleRepository.findByName(Role.ERole.ROLE_PACILLIAN)).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> authService.registerPacillian(pacillianRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Role is not found");
 
@@ -249,7 +248,7 @@ class AuthServiceTest {
         when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.of(careGiverRole));
 
         // when
-        String result = authService.registerCareGiver(careGiverRequest);
+        String result = authServiceImpl.registerCareGiver(careGiverRequest);
 
         // then
         assertThat(result).isEqualTo("CareGiver registered successfully!");
@@ -277,7 +276,7 @@ class AuthServiceTest {
         when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.of(careGiverRole));
 
         // when
-        String result = authService.registerCareGiver(careGiverRequest);
+        String result = authServiceImpl.registerCareGiver(careGiverRequest);
 
         // then
         assertThat(result).isEqualTo("CareGiver registered successfully!");
@@ -295,7 +294,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authService.registerCareGiver(careGiverRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Email is already in use");
 
@@ -310,7 +309,7 @@ class AuthServiceTest {
         when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authService.registerCareGiver(careGiverRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("NIK is already in use");
 
@@ -328,7 +327,7 @@ class AuthServiceTest {
         when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.empty());
 
         // when/then
-        assertThatThrownBy(() -> authService.registerCareGiver(careGiverRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Role is not found");
 

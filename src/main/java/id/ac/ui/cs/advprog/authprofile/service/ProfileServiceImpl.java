@@ -1,14 +1,14 @@
-package id.ac.ui.cs.advprog.authprofile.service;
+package id.ac.ui.cs.advprog.authprofile.service.impl;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
-import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
+import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,20 +20,26 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-public class ProfileService {
+public class ProfileServiceImpl implements IProfileService {
+
+    private final UserRepository userRepository;
+    private final PacillianRepository pacillianRepository;
+    private final CareGiverRepository careGiverRepository;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private PacillianRepository pacillianRepository;
-
-    @Autowired
-    private CareGiverRepository careGiverRepository;
+    public ProfileServiceImpl(
+            UserRepository userRepository,
+            PacillianRepository pacillianRepository,
+            CareGiverRepository careGiverRepository) {
+        this.userRepository = userRepository;
+        this.pacillianRepository = pacillianRepository;
+        this.careGiverRepository = careGiverRepository;
+    }
 
     /**
      * Get the current logged-in user's profile
      */
+    @Override
     public ProfileResponse getCurrentUserProfile() {
         String email = getCurrentUserEmail();
         User user = userRepository.findByEmail(email)
@@ -45,6 +51,7 @@ public class ProfileService {
     /**
      * Get a specific user's profile by ID
      */
+    @Override
     public ProfileResponse getUserProfile(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
@@ -55,6 +62,7 @@ public class ProfileService {
     /**
      * Get all CareGivers
      */
+    @Override
     public List<ProfileResponse> getAllCareGivers() {
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
@@ -65,6 +73,7 @@ public class ProfileService {
     /**
      * Search CareGivers by name and speciality
      */
+    @Override
     public List<ProfileResponse> searchCareGivers(String name, String speciality) {
         List<CareGiver> careGivers;
 
@@ -86,6 +95,7 @@ public class ProfileService {
     /**
      * Update the current user's profile
      */
+    @Override
     @Transactional
     public ProfileResponse updateCurrentUserProfile(UpdateProfileRequest updateRequest) {
         String email = getCurrentUserEmail();
@@ -113,6 +123,7 @@ public class ProfileService {
     /**
      * Delete the current user's account
      */
+    @Override
     @Transactional
     public void deleteCurrentUserAccount() {
         String email = getCurrentUserEmail();

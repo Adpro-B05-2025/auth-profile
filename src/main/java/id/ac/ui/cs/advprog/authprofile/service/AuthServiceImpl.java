@@ -1,9 +1,11 @@
-package id.ac.ui.cs.advprog.authprofile.service;
+package id.ac.ui.cs.advprog.authprofile.service.impl;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
+import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
+import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
@@ -14,6 +16,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
+import id.ac.ui.cs.advprog.authprofile.service.IAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -30,29 +33,35 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class AuthService {
+public class AuthServiceImpl implements IAuthService {
+
+    private final UserRepository userRepository;
+    private final PacillianRepository pacillianRepository;
+    private final CareGiverRepository careGiverRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder encoder;
+    private final AuthenticationManager authenticationManager;
+    private final JwtUtils jwtUtils;
 
     @Autowired
-    private UserRepository userRepository;
+    public AuthServiceImpl(
+            UserRepository userRepository,
+            PacillianRepository pacillianRepository,
+            CareGiverRepository careGiverRepository,
+            RoleRepository roleRepository,
+            PasswordEncoder encoder,
+            AuthenticationManager authenticationManager,
+            JwtUtils jwtUtils) {
+        this.userRepository = userRepository;
+        this.pacillianRepository = pacillianRepository;
+        this.careGiverRepository = careGiverRepository;
+        this.roleRepository = roleRepository;
+        this.encoder = encoder;
+        this.authenticationManager = authenticationManager;
+        this.jwtUtils = jwtUtils;
+    }
 
-    @Autowired
-    private PacillianRepository pacillianRepository;
-
-    @Autowired
-    private CareGiverRepository careGiverRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private PasswordEncoder encoder;
-
-    @Autowired
-    private AuthenticationManager authenticationManager;
-
-    @Autowired
-    private JwtUtils jwtUtils;
-
+    @Override
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
@@ -71,14 +80,15 @@ public class AuthService {
         return new JwtResponse(jwt, user.getId(), user.getEmail(), user.getName(), roles);
     }
 
+    @Override
     @Transactional
     public String registerPacillian(RegisterPacillianRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException("Error: Email is already in use!");
+            throw new EmailAlreadyExistsException("Error: Email is already in use!");
         }
 
         if (userRepository.existsByNik(registerRequest.getNik())) {
-            throw new id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException("Error: NIK is already in use!");
+            throw new ResourceNotFoundException("Error: NIK is already in use!");
         }
 
         // Create new pacillian's account
@@ -103,14 +113,15 @@ public class AuthService {
         return "Pacillian registered successfully!";
     }
 
+    @Override
     @Transactional
     public String registerCareGiver(RegisterCareGiverRequest registerRequest) {
         if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException("Error: Email is already in use!");
+            throw new EmailAlreadyExistsException("Error: Email is already in use!");
         }
 
         if (userRepository.existsByNik(registerRequest.getNik())) {
-            throw new id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException("Error: NIK is already in use!");
+            throw new ResourceNotFoundException("Error: NIK is already in use!");
         }
 
         // Create new caregiver's account
