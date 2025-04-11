@@ -1,8 +1,9 @@
-# .github/workflows/build-and-deploy.yml
 name: Build and Deploy Spring App
 
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     branches: [ "main" ]
 
 jobs:
@@ -25,26 +26,31 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Set gradlew as executable
         run: chmod +x ./gradlew
 
-      - name: Build with Gradle Wrapper (skip tests and jacoco)
-        run: ./gradlew build -x test -x jacocoTestReport
+      - name: Build with Gradle Wrapper
+        run: ./gradlew bootJar -x test -x jacocoTestReport
 
       - name: Find built JAR file
         id: jar
         run: |
-          JAR_FILE=$(ls build/libs/*.jar | head -n 1)
+          JAR_FILE=$(ls build/libs/*-SNAPSHOT.jar | grep -v plain | head -n 1)
           echo "jar_file=$JAR_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found JAR file: $JAR_FILE"
 
+      # Only run deploy steps on push to main, not on pull requests
       - name: Copy JAR to EC2 with scp
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
           chmod 600 private_key.pem
           scp -i private_key.pem -o StrictHostKeyChecking=no "${{ steps.jar.outputs.jar_file }}" ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/appl/app.jar
 
       - name: SSH and restart app.service
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -54,3 +60,8 @@ jobs:
             sudo systemctl stop app.service || true
             sudo systemctl start app.service
             sudo systemctl status app.service --no-pager
+
+      # Add step to clean up the private key
+      - name: Clean up
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: rm -f private_key.pem

@@ -54,6 +54,10 @@ dependencies {
     implementation("me.paulschwarz:spring-dotenv:2.5.4")
 }
 
+springBoot {
+    mainClass.set("id.ac.ui.cs.advprog.authprofile.AuthProfileApplication")
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
 
