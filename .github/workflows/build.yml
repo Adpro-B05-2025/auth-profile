@@ -1,3 +1,4 @@
+# .github/workflows/build.yml
 name: Build Spring App
 
 on:
@@ -5,10 +6,8 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
-    runs-on: self-hosted
-    permissions:
-      contents: read
+  build:
+    runs-on: ubuntu-latest  # Use GitHub-hosted runner
 
     env:
       DATASOURCE_URL: ${{ secrets.DATASOURCE_URL }}
@@ -30,13 +29,11 @@ jobs:
       - name: Set gradlew as executable
         run: chmod +x ./gradlew
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-
-      - name: Stop any running Gradle daemons
-        run: ./gradlew --stop
-
       - name: Build with Gradle Wrapper (skip tests and jacoco)
         run: ./gradlew build -x test -x jacocoTestReport
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-app
+          path: build/libs/*.jar
