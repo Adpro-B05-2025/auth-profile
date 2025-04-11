@@ -1,15 +1,15 @@
 package id.ac.ui.cs.advprog.authprofile.dto;
 
-import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class RegisterPacillianRequestTest {
+class BaseRegisterRequestTest {
 
     @Test
     void testNoArgsConstructor() {
         // when
-        RegisterPacillianRequest request = new RegisterPacillianRequest();
+        BaseRegisterRequest request = new BaseRegisterRequest();
 
         // then
         assertThat(request).isNotNull();
@@ -19,28 +19,22 @@ class RegisterPacillianRequestTest {
         assertThat(request.getNik()).isNull();
         assertThat(request.getAddress()).isNull();
         assertThat(request.getPhoneNumber()).isNull();
-        assertThat(request.getMedicalHistory()).isNull();
     }
 
     @Test
     void testAllArgsConstructor() {
         // given
-        String email = "patient@example.com";
+        String email = "test@example.com";
         String password = "password123";
-        String name = "Patient Name";
+        String name = "Test Name";
         String nik = "1234567890123456";
         String address = "123 Main St";
         String phoneNumber = "0812345678";
-        String medicalHistory = "No significant medical history";
 
         // when
-        RegisterPacillianRequest request = new RegisterPacillianRequest(medicalHistory);
-        request.setEmail(email);
-        request.setPassword(password);
-        request.setName(name);
-        request.setNik(nik);
-        request.setAddress(address);
-        request.setPhoneNumber(phoneNumber);
+        BaseRegisterRequest request = new BaseRegisterRequest(
+                email, password, name, nik, address, phoneNumber
+        );
 
         // then
         assertThat(request).isNotNull();
@@ -50,20 +44,18 @@ class RegisterPacillianRequestTest {
         assertThat(request.getNik()).isEqualTo(nik);
         assertThat(request.getAddress()).isEqualTo(address);
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
-        assertThat(request.getMedicalHistory()).isEqualTo(medicalHistory);
     }
 
     @Test
     void testSettersAndGetters() {
         // given
-        RegisterPacillianRequest request = new RegisterPacillianRequest();
-        String email = "patient@example.com";
+        BaseRegisterRequest request = new BaseRegisterRequest();
+        String email = "test@example.com";
         String password = "password123";
-        String name = "Patient Name";
+        String name = "Test Name";
         String nik = "1234567890123456";
         String address = "123 Main St";
         String phoneNumber = "0812345678";
-        String medicalHistory = "No significant medical history";
 
         // when
         request.setEmail(email);
@@ -72,7 +64,6 @@ class RegisterPacillianRequestTest {
         request.setNik(nik);
         request.setAddress(address);
         request.setPhoneNumber(phoneNumber);
-        request.setMedicalHistory(medicalHistory);
 
         // then
         assertThat(request.getEmail()).isEqualTo(email);
@@ -81,41 +72,25 @@ class RegisterPacillianRequestTest {
         assertThat(request.getNik()).isEqualTo(nik);
         assertThat(request.getAddress()).isEqualTo(address);
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
-        assertThat(request.getMedicalHistory()).isEqualTo(medicalHistory);
     }
 
     @Test
     void testEqualsAndHashCode() {
         // given
-        RegisterPacillianRequest request1 = RegisterPacillianRequest.builder()
-                .email("patient@example.com")
-                .password("password123")
-                .name("Patient Name")
-                .nik("1234567890123456")
-                .address("123 Main St")
-                .phoneNumber("0812345678")
-                .medicalHistory("No significant medical history")
-                .build();
+        BaseRegisterRequest request1 = new BaseRegisterRequest(
+                "test@example.com", "password123", "Test Name",
+                "1234567890123456", "123 Main St", "0812345678"
+        );
 
-        RegisterPacillianRequest request2 = RegisterPacillianRequest.builder()
-                .email("patient@example.com")
-                .password("password123")
-                .name("Patient Name")
-                .nik("1234567890123456")
-                .address("123 Main St")
-                .phoneNumber("0812345678")
-                .medicalHistory("No significant medical history")
-                .build();
+        BaseRegisterRequest request2 = new BaseRegisterRequest(
+                "test@example.com", "password123", "Test Name",
+                "1234567890123456", "123 Main St", "0812345678"
+        );
 
-        RegisterPacillianRequest request3 = RegisterPacillianRequest.builder()
-                .email("other@example.com")
-                .password("password123")
-                .name("Patient Name")
-                .nik("1234567890123456")
-                .address("123 Main St")
-                .phoneNumber("0812345678")
-                .medicalHistory("No significant medical history")
-                .build();
+        BaseRegisterRequest request3 = new BaseRegisterRequest(
+                "other@example.com", "password123", "Test Name",
+                "1234567890123456", "123 Main St", "0812345678"
+        );
 
         // then
         assertThat(request1).isEqualTo(request2);
@@ -127,49 +102,41 @@ class RegisterPacillianRequestTest {
     @Test
     void testToString() {
         // given
-        RegisterPacillianRequest request = RegisterPacillianRequest.builder()
-                .email("patient@example.com")
-                .password("password123")
-                .name("Patient Name")
-                .nik("1234567890123456")
-                .address("123 Main St")
-                .phoneNumber("0812345678")
-                .medicalHistory("No significant medical history")
-                .build();
+        BaseRegisterRequest request = new BaseRegisterRequest(
+                "test@example.com", "password123", "Test Name",
+                "1234567890123456", "123 Main St", "0812345678"
+        );
 
         // when
         String toString = request.toString();
 
         // then
-        assertThat(toString).contains("patient@example.com");
+        assertThat(toString).contains("test@example.com");
         assertThat(toString).contains("password123");
-        assertThat(toString).contains("Patient Name");
+        assertThat(toString).contains("Test Name");
         assertThat(toString).contains("1234567890123456");
         assertThat(toString).contains("123 Main St");
         assertThat(toString).contains("0812345678");
-        assertThat(toString).contains("No significant medical history");
     }
 
     @Test
-    void testSuperBuilder() {
+    void testBuilderPattern() {
         // given
-        String email = "patient@example.com";
+        String email = "test@example.com";
         String password = "password123";
-        String name = "Patient Name";
+        String name = "Test Name";
         String nik = "1234567890123456";
         String address = "123 Main St";
         String phoneNumber = "0812345678";
-        String medicalHistory = "No significant medical history";
 
         // when
-        RegisterPacillianRequest request = RegisterPacillianRequest.builder()
+        BaseRegisterRequest request = BaseRegisterRequest.builder()
                 .email(email)
                 .password(password)
                 .name(name)
                 .nik(nik)
                 .address(address)
                 .phoneNumber(phoneNumber)
-                .medicalHistory(medicalHistory)
                 .build();
 
         // then
@@ -179,6 +146,5 @@ class RegisterPacillianRequestTest {
         assertThat(request.getNik()).isEqualTo(nik);
         assertThat(request.getAddress()).isEqualTo(address);
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
-        assertThat(request.getMedicalHistory()).isEqualTo(medicalHistory);
     }
 }
