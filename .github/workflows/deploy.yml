@@ -1,18 +1,31 @@
+# .github/workflows/deploy.yml
 name: Deploy After Build
 
 on:
   workflow_run:
-    workflows: ["Build Spring App"]  # Name of the first workflow
+    workflows: ["Build Spring App"]
     types:
       - completed
 
 jobs:
   deploy:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: spring-boot-app
+          path: ./app
+
+      - name: Copy JAR to EC2 with scp
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          scp -i private_key.pem -o StrictHostKeyChecking=no ./app/*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/appl/app.jar
+
+      - name: SSH and restart service
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -20,6 +33,5 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo systemctl stop app.service || true
-            cp /actions-runner/_work/auth-profile/auth-profile/build/libs/auth-profile-0.0.1-SNAPSHOT.jar /appl/app.jar
             sudo systemctl start app.service
             sudo systemctl status app.service --no-pager
