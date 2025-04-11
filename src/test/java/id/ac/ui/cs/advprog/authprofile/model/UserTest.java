@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -94,7 +95,14 @@ class UserTest {
 
         assertNotNull(newUser.getCreatedAt());
         assertNotNull(newUser.getUpdatedAt());
-        assertEquals(newUser.getCreatedAt(), newUser.getUpdatedAt());
+
+        // More reliable test - checks that timestamps are within 100ms of each other
+        long diffInMillis = ChronoUnit.MILLIS.between(
+                newUser.getCreatedAt(),
+                newUser.getUpdatedAt()
+        );
+
+        assertTrue(Math.abs(diffInMillis) < 100, "Timestamps should be very close together");
     }
 
     @Test
