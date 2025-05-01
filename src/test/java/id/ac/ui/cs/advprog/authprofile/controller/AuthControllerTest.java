@@ -6,6 +6,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.service.IAuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import java.util.Arrays;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -42,6 +44,8 @@ class AuthControllerTest {
     private RegisterPacillianRequest pacillianRequest;
     private RegisterCareGiverRequest careGiverRequest;
     private JwtResponse jwtResponse;
+    private TokenValidationResponse validTokenResponse;
+    private TokenValidationResponse invalidTokenResponse;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +72,10 @@ class AuthControllerTest {
         careGiverRequest.setWorkingSchedules(null);
 
         jwtResponse = new JwtResponse("test_jwt_token", 1L, "test@example.com", "Test User", Arrays.asList("ROLE_PACILLIAN"));
+
+        // Setup token validation responses
+        validTokenResponse = new TokenValidationResponse(true, 1L, "test@example.com", Arrays.asList("ROLE_PACILLIAN"));
+        invalidTokenResponse = new TokenValidationResponse(false, null, null, null);
     }
 
     @Test
@@ -88,6 +96,22 @@ class AuthControllerTest {
 
     @Test
     @WithMockUser
+    void registerPacillian_ShouldReturnSuccessMessage() throws Exception {
+        // Given
+        String successMessage = "Pacillian registered successfully!";
+        when(authService.registerPacillian(any(RegisterPacillianRequest.class))).thenReturn(successMessage);
+
+        // When & Then
+        mockMvc.perform(post("/api/auth/register/pacillian")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(pacillianRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is(successMessage)))
+                .andExpect(jsonPath("$.success", is(true)));
+    }
+
+    @Test
+    @WithMockUser
     void registerCareGiver_ShouldReturnSuccessMessage() throws Exception {
         // Given
         String successMessage = "CareGiver registered successfully!";
@@ -100,5 +124,56 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message", is(successMessage)))
                 .andExpect(jsonPath("$.success", is(true)));
+    }
+
+    @Test
+    @WithMockUser
+    void validateToken_WithValidToken_ShouldReturnValidResponse() throws Exception {
+        // Given
+        when(authService.validateToken(anyString())).thenReturn(validTokenResponse);
+
+        // When & Then
+        mockMvc.perform(post("/api/auth/validate")
+                        .header("Authorization", "Bearer valid_test_token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid", is(true)))
+                .andExpect(jsonPath("$.userId", is(1)))
+                .andExpect(jsonPath("$.username", is("test@example.com")))
+                .andExpect(jsonPath("$.roles[0]", is("ROLE_PACILLIAN")));
+    }
+
+    @Test
+    @WithMockUser
+    void validateToken_WithInvalidToken_ShouldReturnUnauthorized() throws Exception {
+        // Given
+        when(authService.validateToken(anyString())).thenReturn(invalidTokenResponse);
+
+        // When & Then
+        mockMvc.perform(post("/api/auth/validate")
+                        .header("Authorization", "Bearer invalid_test_token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.valid", is(false)))
+                .andExpect(jsonPath("$.userId").doesNotExist())
+                .andExpect(jsonPath("$.username").doesNotExist())
+                .andExpect(jsonPath("$.roles").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser
+    void validateToken_WithMissingAuthHeader_ShouldReturnUnauthorized() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/api/auth/validate"))
+                .andExpect(status().isUnauthorized());
+        // We expect a 401 Unauthorized as defined in our controller
+    }
+
+    @Test
+    @WithMockUser
+    void validateToken_WithInvalidAuthHeader_ShouldReturnUnauthorized() throws Exception {
+        // When & Then
+        mockMvc.perform(post("/api/auth/validate")
+                        .header("Authorization", "InvalidHeader"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.valid", is(false)));
     }
 }
