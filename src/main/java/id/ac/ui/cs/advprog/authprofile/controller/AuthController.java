@@ -5,9 +5,11 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.MessageResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.service.IAuthService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,5 +41,25 @@ public class AuthController {
     public ResponseEntity<MessageResponse> registerCareGiver(@Valid @RequestBody RegisterCareGiverRequest registerRequest) {
         String message = authService.registerCareGiver(registerRequest);
         return ResponseEntity.ok(new MessageResponse(message));
+    }
+
+    @PostMapping("/validate")
+    public ResponseEntity<TokenValidationResponse> validateToken(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        // Handle missing or improperly formatted header
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new TokenValidationResponse(false, null, null, null));
+        }
+
+        String token = authHeader.substring(7); // Remove "Bearer "
+        TokenValidationResponse response = authService.validateToken(token);
+
+        if (response.isValid()) {
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
     }
 }
