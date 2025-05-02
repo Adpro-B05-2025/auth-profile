@@ -49,15 +49,33 @@ class CareGiverAuthorizationStrategyTest {
     }
 
     @Test
+    void whenCareGiverViewsOwnProfile_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "VIEW_OWN_PROFILE");
+        assertTrue(result, "CareGiver should be able to view their own profile");
+    }
+
+    @Test
     void whenCareGiverViewsAnyProfile_thenReturnTrue() {
         boolean result = strategy.isAuthorized(careGiver, 2L, "VIEW_PROFILE");
         assertTrue(result, "CareGiver should be able to view any profile");
     }
 
     @Test
+    void whenCareGiverViewsAnyProfileWithNullResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "VIEW_PROFILE");
+        assertTrue(result, "CareGiver should be able to view any profile even with null resourceId");
+    }
+
+    @Test
     void whenCareGiverUpdatesOwnProfile_thenReturnTrue() {
         boolean result = strategy.isAuthorized(careGiver, 1L, "UPDATE_PROFILE");
         assertTrue(result, "CareGiver should be able to update their own profile");
+    }
+
+    @Test
+    void whenCareGiverUpdatesOwnProfileWithNullResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "UPDATE_PROFILE");
+        assertTrue(result, "CareGiver should be able to update their own profile when resourceId is null");
     }
 
     @Test
@@ -73,6 +91,12 @@ class CareGiverAuthorizationStrategyTest {
     }
 
     @Test
+    void whenCareGiverDeletesOwnProfileWithNullResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "DELETE_PROFILE");
+        assertTrue(result, "CareGiver should be able to delete their own profile when resourceId is null");
+    }
+
+    @Test
     void whenCareGiverDeletesOtherProfile_thenReturnFalse() {
         boolean result = strategy.isAuthorized(careGiver, 2L, "DELETE_PROFILE");
         assertFalse(result, "CareGiver should not be able to delete other profiles");
@@ -85,8 +109,20 @@ class CareGiverAuthorizationStrategyTest {
     }
 
     @Test
+    void whenCareGiverViewsPacillianMedicalHistoryWithNullResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "VIEW_PACILLIAN_MEDICAL_HISTORY");
+        assertTrue(result, "CareGiver should be able to view any pacillian's medical history even with null resourceId");
+    }
+
+    @Test
     void whenCareGiverPerformsUnknownAction_thenReturnFalse() {
         boolean result = strategy.isAuthorized(careGiver, 1L, "UNKNOWN_ACTION");
         assertFalse(result, "Unknown actions should not be authorized");
+    }
+
+    @Test
+    void whenCareGiverPerformsUnknownActionWithNullResourceId_thenReturnFalse() {
+        boolean result = strategy.isAuthorized(careGiver, null, "UNKNOWN_ACTION");
+        assertFalse(result, "Unknown actions should not be authorized even with null resourceId");
     }
 }
