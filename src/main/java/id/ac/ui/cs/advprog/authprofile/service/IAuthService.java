@@ -29,6 +29,10 @@ public interface IAuthService {
      */
     String registerCareGiver(RegisterCareGiverRequest registerRequest);
 
-
+    /**
+     * Validates a JWT token and returns user information if valid
+     * @param token the JWT token to validate
+     * @return token validation response with user details if valid
+     */
     TokenValidationResponse validateToken(String token);
 }
