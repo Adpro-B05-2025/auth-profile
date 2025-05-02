@@ -139,7 +139,9 @@ public class JwtAuthenticationIntegrationTest {
                 .andExpect(jsonPath("$.email", is("test@example.com")))
                 .andExpect(jsonPath("$.name", is("Test User")));
 
-        // 5. Access protected endpoint without token (should fail)
+        // 5. Access protected endpoint without token
+        // The issue is here - check actual security config
+        // Check your WebSecurityConfig.filterChain method to ensure it's configured correctly
         mockMvc.perform(get("/api/profile"))
                 .andExpect(status().isUnauthorized());
     }
