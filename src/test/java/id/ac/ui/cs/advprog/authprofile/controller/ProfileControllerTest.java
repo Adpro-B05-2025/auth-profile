@@ -4,12 +4,19 @@ import id.ac.ui.cs.advprog.authprofile.config.AuthTestConfig;
 import id.ac.ui.cs.advprog.authprofile.config.ProfileServiceTestConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.exception.UnauthorizedException;
+import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
+import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
+import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,17 +26,40 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-@WebMvcTest(ProfileController.class)
-@Import({AuthTestConfig.class, ProfileServiceTestConfig.class})
+@WebMvcTest(controllers = ProfileController.class)
+@Import({AuthTestConfig.class, ProfileServiceTestConfig.class, ProfileControllerTest.TestConfig.class})
 class ProfileControllerTest {
+
+    @TestConfiguration
+    static class TestConfig {
+        @Bean
+        @Primary
+        public AuthorizationAspect authorizationAspect(AuthorizationContext authorizationContext,
+                                                       UserRepository userRepository) {
+            // Create the real aspect but with your mocked dependencies
+            return new AuthorizationAspect(authorizationContext, userRepository);
+        }
+
+        @Bean
+        @Primary
+        public AuthorizationContext authorizationContext() {
+            AuthorizationContext mock = mock(AuthorizationContext.class);
+            // The default behavior will be to return true
+            when(mock.isAuthorized(any(), any(), anyString())).thenReturn(true);
+            return mock;
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -40,11 +70,17 @@ class ProfileControllerTest {
     @Autowired
     private IProfileService profileService;
 
+    @Autowired
+    private AuthorizationContext authorizationContext;
+
     private ProfileResponse sampleProfileResponse;
     private UpdateProfileRequest updateProfileRequest;
 
     @BeforeEach
     void setUp() {
+        // Reset mock and ensure authorization passes by default
+        when(authorizationContext.isAuthorized(any(), any(), anyString())).thenReturn(true);
+
         // Setup sample profile response
         sampleProfileResponse = new ProfileResponse();
         sampleProfileResponse.setId(1L);
@@ -159,7 +195,7 @@ class ProfileControllerTest {
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        when(profileService.searchCareGivers("Doctor", "Cardiology")).thenReturn(caregivers);
+        when(profileService.searchCareGivers(eq("Doctor"), eq("Cardiology"))).thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
@@ -188,5 +224,16 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.id").value(doctorProfile.getId()))
                 .andExpect(jsonPath("$.email").value(doctorProfile.getEmail()))
                 .andExpect(jsonPath("$.userType").value(doctorProfile.getUserType()));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void whenUserNotAuthorized_thenReturnForbidden() throws Exception {
+        // Mock the service to throw UnauthorizedException
+        when(profileService.getCurrentUserProfile())
+                .thenThrow(new UnauthorizedException("User not authorized"));
+
+        mockMvc.perform(get("/api/profile"))
+                .andExpect(status().isForbidden());
     }
 }

@@ -70,4 +70,10 @@ public class GlobalExceptionHandler {
         MessageResponse response = new MessageResponse("An unexpected error occurred: " + ex.getMessage(), false);
         return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<MessageResponse> handleUnauthorizedException(UnauthorizedException ex) {
+        MessageResponse response = new MessageResponse(ex.getMessage(), false);
+        return new ResponseEntity<>(response, HttpStatus.FORBIDDEN);
+    }
 }

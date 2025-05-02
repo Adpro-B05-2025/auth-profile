@@ -3,6 +3,7 @@ package id.ac.ui.cs.advprog.authprofile.controller;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.MessageResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.security.annotation.RequiresAuthorization;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,18 +26,21 @@ public class ProfileController {
     }
 
     @GetMapping("/profile")
+    @RequiresAuthorization(action = "VIEW_OWN_PROFILE")
     public ResponseEntity<ProfileResponse> getCurrentUserProfile() {
         ProfileResponse profile = profileService.getCurrentUserProfile();
         return ResponseEntity.ok(profile);
     }
 
     @PutMapping("/profile")
+    @RequiresAuthorization(action = "UPDATE_PROFILE", resourceIdExpression = "null")
     public ResponseEntity<ProfileResponse> updateCurrentUserProfile(@Valid @RequestBody UpdateProfileRequest updateRequest) {
         ProfileResponse updatedProfile = profileService.updateCurrentUserProfile(updateRequest);
         return ResponseEntity.ok(updatedProfile);
     }
 
     @DeleteMapping("/profile")
+    @RequiresAuthorization(action = "DELETE_PROFILE", resourceIdExpression = "null")
     public ResponseEntity<MessageResponse> deleteCurrentUserAccount() {
         profileService.deleteCurrentUserAccount();
         return ResponseEntity.ok(new MessageResponse("User account deleted successfully"));
@@ -57,7 +61,10 @@ public class ProfileController {
     }
 
     @GetMapping("/user/{id}")
-    @PreAuthorize("hasRole('PACILLIAN') or hasRole('CAREGIVER')")
+    @RequiresAuthorization(
+            action = "VIEW_PROFILE",
+            resourceIdExpression = "#args[0]" // This gets the id path variable
+    )
     public ResponseEntity<ProfileResponse> getUserProfile(@PathVariable Long id) {
         ProfileResponse profile = profileService.getUserProfile(id);
         return ResponseEntity.ok(profile);

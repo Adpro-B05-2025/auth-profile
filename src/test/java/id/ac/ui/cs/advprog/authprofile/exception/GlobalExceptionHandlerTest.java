@@ -21,9 +21,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -156,5 +154,19 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertTrue(response.getBody().getMessage().contains("An unexpected error occurred"));
         assertFalse(response.getBody().isSuccess());
+    }
+
+    @Test
+    void handleUnauthorizedException() {
+        String errorMessage = "User not authorized";
+        UnauthorizedException exception = new UnauthorizedException(errorMessage);
+
+        ResponseEntity<MessageResponse> response = exceptionHandler.handleUnauthorizedException(exception);
+
+        assertNotNull(response, "Response should not be null");
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode(), "Status code should be FORBIDDEN");
+        assertNotNull(response.getBody(), "Response body should not be null");
+        assertEquals(errorMessage, response.getBody().getMessage(), "Error message should match");
+        assertFalse(response.getBody().isSuccess(), "Success flag should be false");
     }
 }
