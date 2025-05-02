@@ -8,6 +8,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,17 +18,22 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,9 +56,19 @@ public class JwtAuthenticationIntegrationTest {
             when(mockContext.isAuthorized(any(), any(), anyString())).thenReturn(true);
             return mockContext;
         }
+
+        // Configure test properties
+        @DynamicPropertySource
+        static void configureTestProperties(DynamicPropertyRegistry registry) {
+            // Override JWT configuration to ensure clean test environment
+            registry.add("pandacare.app.jwtSecret", () -> "testSecretKeyForIntegrationTestingOnly");
+            registry.add("pandacare.app.jwtExpirationMs", () -> "3600000");
+        }
     }
 
     @Autowired
+    private WebApplicationContext context;
+
     private MockMvc mockMvc;
 
     @Autowired
@@ -75,6 +91,12 @@ public class JwtAuthenticationIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // Set up MockMvc with security for each test
+        mockMvc = MockMvcBuilders
+                .webAppContextSetup(context)
+                .apply(springSecurity())
+                .build();
+
         // Configure mock authorization context to always return true for tests
         when(authorizationContext.isAuthorized(any(), any(), anyString())).thenReturn(true);
 
@@ -110,6 +132,12 @@ public class JwtAuthenticationIntegrationTest {
         loginRequest.setPassword("password123");
     }
 
+    @AfterEach
+    void tearDown() {
+        // Clear security context after each test
+        SecurityContextHolder.clearContext();
+    }
+
     @Test
     void fullAuthenticationFlow() throws Exception {
         // 1. Register a new pacillian
@@ -139,9 +167,10 @@ public class JwtAuthenticationIntegrationTest {
                 .andExpect(jsonPath("$.email", is("test@example.com")))
                 .andExpect(jsonPath("$.name", is("Test User")));
 
-        // 5. Access protected endpoint without token
-        // The issue is here - check actual security config
-        // Check your WebSecurityConfig.filterChain method to ensure it's configured correctly
+        // Clear security context to ensure clean state
+        SecurityContextHolder.clearContext();
+
+        // 5. Access protected endpoint without token (should fail)
         mockMvc.perform(get("/api/profile"))
                 .andExpect(status().isUnauthorized());
     }

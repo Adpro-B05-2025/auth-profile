@@ -9,6 +9,7 @@ import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -90,6 +91,11 @@ public class AuthorizationIntegrationTest {
         when(userRepository.findByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
         when(profileService.getCurrentUserProfile()).thenReturn(profileResponse);
         when(profileService.getUserProfile(2L)).thenReturn(otherProfile);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
