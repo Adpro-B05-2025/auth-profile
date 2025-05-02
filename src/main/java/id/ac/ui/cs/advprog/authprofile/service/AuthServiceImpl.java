@@ -7,11 +7,10 @@ import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
+import id.ac.ui.cs.advprog.authprofile.factory.UserFactoryProvider;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
-import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
@@ -29,9 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,6 +41,7 @@ public class AuthServiceImpl implements IAuthService {
     private final PasswordEncoder encoder;
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
+    private final UserFactoryProvider factoryProvider;
 
     @Autowired
     public AuthServiceImpl(
@@ -53,7 +51,8 @@ public class AuthServiceImpl implements IAuthService {
             RoleRepository roleRepository,
             PasswordEncoder encoder,
             AuthenticationManager authenticationManager,
-            JwtUtils jwtUtils) {
+            JwtUtils jwtUtils,
+            UserFactoryProvider factoryProvider) {
         this.userRepository = userRepository;
         this.pacillianRepository = pacillianRepository;
         this.careGiverRepository = careGiverRepository;
@@ -61,6 +60,7 @@ public class AuthServiceImpl implements IAuthService {
         this.encoder = encoder;
         this.authenticationManager = authenticationManager;
         this.jwtUtils = jwtUtils;
+        this.factoryProvider = factoryProvider;
     }
 
     @Override
@@ -85,30 +85,11 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public String registerPacillian(RegisterPacillianRequest registerRequest) {
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new EmailAlreadyExistsException("Error: Email is already in use!");
-        }
+        validateRegistrationRequest(registerRequest);
 
-        if (userRepository.existsByNik(registerRequest.getNik())) {
-            throw new ResourceNotFoundException("Error: NIK is already in use!");
-        }
-
-        // Create new pacillian's account
-        Pacillian pacillian = new Pacillian(
-                registerRequest.getEmail(),
-                encoder.encode(registerRequest.getPassword()),
-                registerRequest.getName(),
-                registerRequest.getNik(),
-                registerRequest.getAddress(),
-                registerRequest.getPhoneNumber(),
-                registerRequest.getMedicalHistory()
-        );
-
-        Set<Role> roles = new HashSet<>();
-        Role userRole = roleRepository.findByName(Role.ERole.ROLE_PACILLIAN)
-                .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-        roles.add(userRole);
-        pacillian.setRoles(roles);
+        // Use factory pattern to create Pacillian user
+        Pacillian pacillian = (Pacillian) factoryProvider.getFactory(registerRequest)
+                .createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
 
         pacillianRepository.save(pacillian);
 
@@ -118,44 +99,11 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     @Transactional
     public String registerCareGiver(RegisterCareGiverRequest registerRequest) {
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            throw new EmailAlreadyExistsException("Error: Email is already in use!");
-        }
+        validateRegistrationRequest(registerRequest);
 
-        if (userRepository.existsByNik(registerRequest.getNik())) {
-            throw new ResourceNotFoundException("Error: NIK is already in use!");
-        }
-
-        // Create new caregiver's account
-        CareGiver careGiver = new CareGiver(
-                registerRequest.getEmail(),
-                encoder.encode(registerRequest.getPassword()),
-                registerRequest.getName(),
-                registerRequest.getNik(),
-                registerRequest.getAddress(),
-                registerRequest.getPhoneNumber(),
-                registerRequest.getSpeciality(),
-                registerRequest.getWorkAddress()
-        );
-
-        // Add working schedules if provided
-        if (registerRequest.getWorkingSchedules() != null) {
-            for (RegisterCareGiverRequest.WorkingScheduleRequest scheduleRequest : registerRequest.getWorkingSchedules()) {
-                WorkingSchedule schedule = new WorkingSchedule(
-                        scheduleRequest.getDayOfWeek(),
-                        scheduleRequest.getStartTime(),
-                        scheduleRequest.getEndTime(),
-                        careGiver
-                );
-                careGiver.addWorkingSchedule(schedule);
-            }
-        }
-
-        Set<Role> roles = new HashSet<>();
-        Role doctorRole = roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)
-                .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
-        roles.add(doctorRole);
-        careGiver.setRoles(roles);
+        // Use factory pattern to create CareGiver user
+        CareGiver careGiver = (CareGiver) factoryProvider.getFactory(registerRequest)
+                .createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
 
         careGiverRepository.save(careGiver);
 
@@ -188,6 +136,20 @@ public class AuthServiceImpl implements IAuthService {
 
         } catch (Exception e) {
             return new TokenValidationResponse(false, null, null, null);
+        }
+    }
+
+    /**
+     * Validates common aspects of registration requests
+     * @param registerRequest the request to validate
+     */
+    private void validateRegistrationRequest(id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest registerRequest) {
+        if (userRepository.existsByEmail(registerRequest.getEmail())) {
+            throw new EmailAlreadyExistsException("Error: Email is already in use!");
+        }
+
+        if (userRepository.existsByNik(registerRequest.getNik())) {
+            throw new ResourceNotFoundException("Error: NIK is already in use!");
         }
     }
 }
