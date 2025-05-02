@@ -4,6 +4,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
@@ -23,6 +24,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -158,5 +160,34 @@ public class AuthServiceImpl implements IAuthService {
         careGiverRepository.save(careGiver);
 
         return "CareGiver registered successfully!";
+    }
+
+    @Override
+    public TokenValidationResponse validateToken(String token) {
+        try {
+            // Validate JWT token
+            boolean isValid = jwtUtils.validateJwtToken(token);
+            if (!isValid) {
+                return new TokenValidationResponse(false, null, null, null);
+            }
+
+            // Extract username from token
+            String username = jwtUtils.getUserNameFromJwtToken(token);
+
+            // Find the user
+            User user = userRepository.findByEmail(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
+
+            // Extract roles
+            List<String> roles = user.getRoles().stream()
+                    .map(role -> role.getName().name())
+                    .collect(Collectors.toList());
+
+            // Return validation response
+            return new TokenValidationResponse(true, user.getId(), username, roles);
+
+        } catch (Exception e) {
+            return new TokenValidationResponse(false, null, null, null);
+        }
     }
 }

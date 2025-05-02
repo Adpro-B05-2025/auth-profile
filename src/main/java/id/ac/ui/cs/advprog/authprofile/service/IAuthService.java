@@ -4,6 +4,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 
 public interface IAuthService {
 
@@ -27,4 +28,7 @@ public interface IAuthService {
      * @return success message
      */
     String registerCareGiver(RegisterCareGiverRequest registerRequest);
+
+
+    TokenValidationResponse validateToken(String token);
 }

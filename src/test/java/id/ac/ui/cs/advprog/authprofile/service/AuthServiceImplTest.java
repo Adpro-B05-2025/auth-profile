@@ -4,6 +4,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
@@ -70,6 +71,8 @@ class AuthServiceImplTest {
     private User user;
     private Role pacillianRole;
     private Role careGiverRole;
+    private String validToken;
+    private String invalidToken;
 
     @BeforeEach
     void setUp() {
@@ -121,6 +124,10 @@ class AuthServiceImplTest {
         Set<Role> roles = new HashSet<>();
         roles.add(pacillianRole);
         user.setRoles(roles);
+
+        // Setup tokens for validation tests
+        validToken = "valid.jwt.token";
+        invalidToken = "invalid.jwt.token";
     }
 
     @Test
@@ -333,5 +340,85 @@ class AuthServiceImplTest {
 
         verify(roleRepository).findByName(Role.ERole.ROLE_CAREGIVER);
         verify(careGiverRepository, never()).save(any(CareGiver.class));
+    }
+
+    // New tests for token validation
+
+    @Test
+    void validateToken_WithValidToken_ShouldReturnValidResponse() {
+        // given
+        when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
+        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+        // when
+        TokenValidationResponse response = authServiceImpl.validateToken(validToken);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.isValid()).isTrue();
+        assertThat(response.getUserId()).isEqualTo(1L);
+        assertThat(response.getUsername()).isEqualTo("test@example.com");
+        assertThat(response.getRoles()).contains("ROLE_PACILLIAN");
+
+        verify(jwtUtils).validateJwtToken(validToken);
+        verify(jwtUtils).getUserNameFromJwtToken(validToken);
+        verify(userRepository).findByEmail("test@example.com");
+    }
+
+    @Test
+    void validateToken_WithInvalidToken_ShouldReturnInvalidResponse() {
+        // given
+        when(jwtUtils.validateJwtToken(invalidToken)).thenReturn(false);
+
+        // when
+        TokenValidationResponse response = authServiceImpl.validateToken(invalidToken);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.isValid()).isFalse();
+        assertThat(response.getUserId()).isNull();
+        assertThat(response.getUsername()).isNull();
+        assertThat(response.getRoles()).isNull();
+
+        verify(jwtUtils).validateJwtToken(invalidToken);
+        verify(jwtUtils, never()).getUserNameFromJwtToken(anyString());
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void validateToken_WhenExceptionOccurs_ShouldReturnInvalidResponse() {
+        // given
+        when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
+        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
+        when(userRepository.findByEmail("test@example.com")).thenThrow(new RuntimeException("Test exception"));
+
+        // when
+        TokenValidationResponse response = authServiceImpl.validateToken(validToken);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.isValid()).isFalse();
+        assertThat(response.getUserId()).isNull();
+        assertThat(response.getUsername()).isNull();
+        assertThat(response.getRoles()).isNull();
+
+        verify(jwtUtils).validateJwtToken(validToken);
+        verify(jwtUtils).getUserNameFromJwtToken(validToken);
+        verify(userRepository).findByEmail("test@example.com");
+    }
+
+    @Test
+    void validateToken_WhenUserNotFound_ShouldReturnInvalidResponse() {
+        // given
+        when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
+        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+
+        // when/then
+        TokenValidationResponse response = authServiceImpl.validateToken(validToken);
+
+        // Response should be invalid
+        assertThat(response.isValid()).isFalse();
     }
 }
