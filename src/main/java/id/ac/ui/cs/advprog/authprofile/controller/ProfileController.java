@@ -26,21 +26,21 @@ public class ProfileController {
     }
 
     @GetMapping("/profile")
-    @RequiresAuthorization(action = "VIEW_PROFILE")
+    @RequiresAuthorization(action = "VIEW_OWN_PROFILE")
     public ResponseEntity<ProfileResponse> getCurrentUserProfile() {
         ProfileResponse profile = profileService.getCurrentUserProfile();
         return ResponseEntity.ok(profile);
     }
 
     @PutMapping("/profile")
-    @RequiresAuthorization(action = "UPDATE_PROFILE")
+    @RequiresAuthorization(action = "UPDATE_PROFILE", resourceIdExpression = "null")
     public ResponseEntity<ProfileResponse> updateCurrentUserProfile(@Valid @RequestBody UpdateProfileRequest updateRequest) {
         ProfileResponse updatedProfile = profileService.updateCurrentUserProfile(updateRequest);
         return ResponseEntity.ok(updatedProfile);
     }
 
     @DeleteMapping("/profile")
-    @RequiresAuthorization(action = "DELETE_PROFILE")
+    @RequiresAuthorization(action = "DELETE_PROFILE", resourceIdExpression = "null")
     public ResponseEntity<MessageResponse> deleteCurrentUserAccount() {
         profileService.deleteCurrentUserAccount();
         return ResponseEntity.ok(new MessageResponse("User account deleted successfully"));

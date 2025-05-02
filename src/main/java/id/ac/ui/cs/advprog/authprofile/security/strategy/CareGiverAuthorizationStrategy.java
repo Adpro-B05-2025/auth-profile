@@ -16,13 +16,16 @@ public class CareGiverAuthorizationStrategy implements AuthorizationStrategy {
 
         // Check specific actions
         switch (action) {
+            case "VIEW_OWN_PROFILE":
+                // CareGivers can always view their own profile
+                return true;
             case "VIEW_PROFILE":
                 // CareGivers can view any profile
                 return true;
             case "UPDATE_PROFILE":
             case "DELETE_PROFILE":
                 // CareGivers can only update/delete their own profile
-                return user.getId().equals(resourceId);
+                return resourceId == null || user.getId().equals(resourceId);
             case "VIEW_PACILLIAN_MEDICAL_HISTORY":
                 // CareGivers can view any Pacillian's medical history
                 return true;
