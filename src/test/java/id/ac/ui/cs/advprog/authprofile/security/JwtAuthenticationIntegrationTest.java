@@ -7,11 +7,15 @@ import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
+import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,6 +23,11 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.is;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,6 +38,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 public class JwtAuthenticationIntegrationTest {
+
+    // Add test configuration to mock authorization context
+    @TestConfiguration
+    static class TestConfig {
+        @Bean
+        @Primary
+        public AuthorizationContext authorizationContext() {
+            AuthorizationContext mockContext = mock(AuthorizationContext.class);
+            // Always authorize for tests
+            when(mockContext.isAuthorized(any(), any(), anyString())).thenReturn(true);
+            return mockContext;
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -45,11 +67,17 @@ public class JwtAuthenticationIntegrationTest {
     @Autowired
     private PacillianRepository pacillianRepository;
 
+    @Autowired
+    private AuthorizationContext authorizationContext;
+
     private RegisterPacillianRequest registerRequest;
     private LoginRequest loginRequest;
 
     @BeforeEach
     void setUp() {
+        // Configure mock authorization context to always return true for tests
+        when(authorizationContext.isAuthorized(any(), any(), anyString())).thenReturn(true);
+
         // Check if roles exist, if not create them for tests
         if (!roleRepository.findByName(Role.ERole.ROLE_PACILLIAN).isPresent()) {
             Role pacillianRole = new Role();
