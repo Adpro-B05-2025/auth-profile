@@ -51,4 +51,11 @@ public class PacillianFactory implements UserFactory {
 
         return pacillian;
     }
+
+    @Override
+    public Set<Class<? extends BaseRegisterRequest>> getSupportedRequestTypes() {
+        Set<Class<? extends BaseRegisterRequest>> supportedTypes = new HashSet<>();
+        supportedTypes.add(RegisterPacillianRequest.class);
+        return supportedTypes;
+    }
 }

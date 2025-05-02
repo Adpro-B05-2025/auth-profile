@@ -66,4 +66,11 @@ public class CareGiverFactory implements UserFactory {
 
         return careGiver;
     }
+
+    @Override
+    public Set<Class<? extends BaseRegisterRequest>> getSupportedRequestTypes() {
+        Set<Class<? extends BaseRegisterRequest>> supportedTypes = new HashSet<>();
+        supportedTypes.add(RegisterCareGiverRequest.class);
+        return supportedTypes;
+    }
 }
