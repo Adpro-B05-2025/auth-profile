@@ -5,6 +5,9 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
+import id.ac.ui.cs.advprog.authprofile.factory.CareGiverFactory;
+import id.ac.ui.cs.advprog.authprofile.factory.PacillianFactory;
+import id.ac.ui.cs.advprog.authprofile.factory.UserFactoryProvider;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
@@ -36,6 +39,7 @@ import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,6 +66,15 @@ class AuthServiceImplTest {
     @Mock
     private JwtUtils jwtUtils;
 
+    @Mock
+    private UserFactoryProvider factoryProvider;
+
+    @Mock
+    private PacillianFactory pacillianFactory;
+
+    @Mock
+    private CareGiverFactory careGiverFactory;
+
     @InjectMocks
     private AuthServiceImpl authServiceImpl;
 
@@ -69,6 +82,8 @@ class AuthServiceImplTest {
     private RegisterPacillianRequest pacillianRequest;
     private RegisterCareGiverRequest careGiverRequest;
     private User user;
+    private Pacillian pacillian;
+    private CareGiver careGiver;
     private Role pacillianRole;
     private Role careGiverRole;
     private String validToken;
@@ -121,9 +136,35 @@ class AuthServiceImplTest {
         careGiverRole.setId(2);
         careGiverRole.setName(Role.ERole.ROLE_CAREGIVER);
 
-        Set<Role> roles = new HashSet<>();
-        roles.add(pacillianRole);
-        user.setRoles(roles);
+        Set<Role> userRoles = new HashSet<>();
+        userRoles.add(pacillianRole);
+        user.setRoles(userRoles);
+
+        // Create test models for pacillian and caregiver
+        pacillian = new Pacillian();
+        pacillian.setEmail(pacillianRequest.getEmail());
+        pacillian.setPassword("encoded_password");
+        pacillian.setName(pacillianRequest.getName());
+        pacillian.setNik(pacillianRequest.getNik());
+        pacillian.setAddress(pacillianRequest.getAddress());
+        pacillian.setPhoneNumber(pacillianRequest.getPhoneNumber());
+        pacillian.setMedicalHistory(pacillianRequest.getMedicalHistory());
+        Set<Role> pacillianRoles = new HashSet<>();
+        pacillianRoles.add(pacillianRole);
+        pacillian.setRoles(pacillianRoles);
+
+        careGiver = new CareGiver();
+        careGiver.setEmail(careGiverRequest.getEmail());
+        careGiver.setPassword("encoded_password");
+        careGiver.setName(careGiverRequest.getName());
+        careGiver.setNik(careGiverRequest.getNik());
+        careGiver.setAddress(careGiverRequest.getAddress());
+        careGiver.setPhoneNumber(careGiverRequest.getPhoneNumber());
+        careGiver.setSpeciality(careGiverRequest.getSpeciality());
+        careGiver.setWorkAddress(careGiverRequest.getWorkAddress());
+        Set<Role> careGiverRoles = new HashSet<>();
+        careGiverRoles.add(careGiverRole);
+        careGiver.setRoles(careGiverRoles);
 
         // Setup tokens for validation tests
         validToken = "valid.jwt.token";
@@ -184,7 +225,8 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(false);
         when(userRepository.existsByNik(pacillianRequest.getNik())).thenReturn(false);
         when(encoder.encode(pacillianRequest.getPassword())).thenReturn("encoded_password");
-        when(roleRepository.findByName(Role.ERole.ROLE_PACILLIAN)).thenReturn(Optional.of(pacillianRole));
+        when(factoryProvider.getFactory(pacillianRequest)).thenReturn(pacillianFactory);
+        when(pacillianFactory.createUser(eq(pacillianRequest), anyString())).thenReturn(pacillian);
 
         // when
         String result = authServiceImpl.registerPacillian(pacillianRequest);
@@ -195,8 +237,9 @@ class AuthServiceImplTest {
         verify(userRepository).existsByEmail(pacillianRequest.getEmail());
         verify(userRepository).existsByNik(pacillianRequest.getNik());
         verify(encoder).encode(pacillianRequest.getPassword());
-        verify(roleRepository).findByName(Role.ERole.ROLE_PACILLIAN);
-        verify(pacillianRepository).save(any(Pacillian.class));
+        verify(factoryProvider).getFactory(pacillianRequest);
+        verify(pacillianFactory).createUser(eq(pacillianRequest), anyString());
+        verify(pacillianRepository).save(pacillian);
     }
 
     @Test
@@ -211,6 +254,7 @@ class AuthServiceImplTest {
 
         verify(userRepository).existsByEmail(pacillianRequest.getEmail());
         verify(pacillianRepository, never()).save(any(Pacillian.class));
+        verify(factoryProvider, never()).getFactory(any());
     }
 
     @Test
@@ -227,23 +271,7 @@ class AuthServiceImplTest {
         verify(userRepository).existsByEmail(pacillianRequest.getEmail());
         verify(userRepository).existsByNik(pacillianRequest.getNik());
         verify(pacillianRepository, never()).save(any(Pacillian.class));
-    }
-
-    @Test
-    void registerPacillian_WhenRoleNotFound_ShouldThrowException() {
-        // given
-        when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(false);
-        when(userRepository.existsByNik(pacillianRequest.getNik())).thenReturn(false);
-        when(encoder.encode(pacillianRequest.getPassword())).thenReturn("encoded_password");
-        when(roleRepository.findByName(Role.ERole.ROLE_PACILLIAN)).thenReturn(Optional.empty());
-
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Role is not found");
-
-        verify(roleRepository).findByName(Role.ERole.ROLE_PACILLIAN);
-        verify(pacillianRepository, never()).save(any(Pacillian.class));
+        verify(factoryProvider, never()).getFactory(any());
     }
 
     @Test
@@ -252,7 +280,8 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(false);
         when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(false);
         when(encoder.encode(careGiverRequest.getPassword())).thenReturn("encoded_password");
-        when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.of(careGiverRole));
+        when(factoryProvider.getFactory(careGiverRequest)).thenReturn(careGiverFactory);
+        when(careGiverFactory.createUser(eq(careGiverRequest), anyString())).thenReturn(careGiver);
 
         // when
         String result = authServiceImpl.registerCareGiver(careGiverRequest);
@@ -263,36 +292,9 @@ class AuthServiceImplTest {
         verify(userRepository).existsByEmail(careGiverRequest.getEmail());
         verify(userRepository).existsByNik(careGiverRequest.getNik());
         verify(encoder).encode(careGiverRequest.getPassword());
-        verify(roleRepository).findByName(Role.ERole.ROLE_CAREGIVER);
-
-        // Verify that a working schedule was added to the CareGiver
-        ArgumentCaptor<CareGiver> careGiverCaptor = ArgumentCaptor.forClass(CareGiver.class);
-        verify(careGiverRepository).save(careGiverCaptor.capture());
-        CareGiver savedCareGiver = careGiverCaptor.getValue();
-        assertThat(savedCareGiver.getWorkingSchedules()).isNotEmpty();
-        assertThat(savedCareGiver.getWorkingSchedules().size()).isEqualTo(1);
-    }
-
-    @Test
-    void registerCareGiver_WithoutWorkingSchedules_ShouldRegisterSuccessfully() {
-        // given
-        careGiverRequest.setWorkingSchedules(null);
-        when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(false);
-        when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(false);
-        when(encoder.encode(careGiverRequest.getPassword())).thenReturn("encoded_password");
-        when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.of(careGiverRole));
-
-        // when
-        String result = authServiceImpl.registerCareGiver(careGiverRequest);
-
-        // then
-        assertThat(result).isEqualTo("CareGiver registered successfully!");
-
-        // Verify that no working schedules were added
-        ArgumentCaptor<CareGiver> careGiverCaptor = ArgumentCaptor.forClass(CareGiver.class);
-        verify(careGiverRepository).save(careGiverCaptor.capture());
-        CareGiver savedCareGiver = careGiverCaptor.getValue();
-        assertThat(savedCareGiver.getWorkingSchedules()).isEmpty();
+        verify(factoryProvider).getFactory(careGiverRequest);
+        verify(careGiverFactory).createUser(eq(careGiverRequest), anyString());
+        verify(careGiverRepository).save(careGiver);
     }
 
     @Test
@@ -307,6 +309,7 @@ class AuthServiceImplTest {
 
         verify(userRepository).existsByEmail(careGiverRequest.getEmail());
         verify(careGiverRepository, never()).save(any(CareGiver.class));
+        verify(factoryProvider, never()).getFactory(any());
     }
 
     @Test
@@ -323,26 +326,10 @@ class AuthServiceImplTest {
         verify(userRepository).existsByEmail(careGiverRequest.getEmail());
         verify(userRepository).existsByNik(careGiverRequest.getNik());
         verify(careGiverRepository, never()).save(any(CareGiver.class));
+        verify(factoryProvider, never()).getFactory(any());
     }
 
-    @Test
-    void registerCareGiver_WhenRoleNotFound_ShouldThrowException() {
-        // given
-        when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(false);
-        when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(false);
-        when(encoder.encode(careGiverRequest.getPassword())).thenReturn("encoded_password");
-        when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.empty());
-
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Role is not found");
-
-        verify(roleRepository).findByName(Role.ERole.ROLE_CAREGIVER);
-        verify(careGiverRepository, never()).save(any(CareGiver.class));
-    }
-
-    // New tests for token validation
+    // Token validation tests remain mostly unchanged
 
     @Test
     void validateToken_WithValidToken_ShouldReturnValidResponse() {
