@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.factory;
 
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,11 +11,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class UserFactoryProviderTest {
@@ -31,7 +32,18 @@ class UserFactoryProviderTest {
 
     @BeforeEach
     void setUp() {
-        factoryProvider = new UserFactoryProvider(pacillianFactory, careGiverFactory);
+        // Set up factory mocks to return their supported types
+        Set<Class<? extends BaseRegisterRequest>> pacillianTypes = new HashSet<>();
+        pacillianTypes.add(RegisterPacillianRequest.class);
+        when(pacillianFactory.getSupportedRequestTypes()).thenReturn(pacillianTypes);
+
+        Set<Class<? extends BaseRegisterRequest>> careGiverTypes = new HashSet<>();
+        careGiverTypes.add(RegisterCareGiverRequest.class);
+        when(careGiverFactory.getSupportedRequestTypes()).thenReturn(careGiverTypes);
+
+        // Create factory provider with list of mocked factories
+        List<UserFactory> factories = Arrays.asList(pacillianFactory, careGiverFactory);
+        factoryProvider = new UserFactoryProvider(factories);
 
         // Set up pacillian request
         pacillianRequest = new RegisterPacillianRequest();
@@ -86,6 +98,30 @@ class UserFactoryProviderTest {
     void getFactory_WithNullRequest_ShouldThrowException() {
         // when/then
         assertThatThrownBy(() -> factoryProvider.getFactory(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Register request cannot be null");
+    }
+
+    @Test
+    void getFactory_WithUnsupportedRequestType_ShouldThrowException() {
+        // Create a mock unsupported request
+        BaseRegisterRequest unsupportedRequest = new BaseRegisterRequest() {
+            // Anonymous inner class that extends BaseRegisterRequest
+        };
+
+        // when/then
+        assertThatThrownBy(() -> factoryProvider.getFactory(unsupportedRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported registration request type");
+    }
+
+    @Test
+    void construction_WithNoFactories_ShouldCreateEmptyRegistry() {
+        // when
+        UserFactoryProvider emptyProvider = new UserFactoryProvider(Collections.emptyList());
+
+        // then - should not throw an exception, but any request should be unsupported
+        assertThatThrownBy(() -> emptyProvider.getFactory(pacillianRequest))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unsupported registration request type");
     }
