@@ -7,10 +7,13 @@ import id.ac.ui.cs.advprog.authprofile.security.annotation.RequiresAuthorization
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -55,8 +58,11 @@ public class ProfileController {
     @GetMapping("/caregiver/search")
     public ResponseEntity<List<ProfileResponse>> searchCareGivers(
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String speciality) {
-        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality);
+            @RequestParam(required = false) String speciality,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) DayOfWeek dayOfWeek,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime time) {
+
+        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality, dayOfWeek, time);
         return ResponseEntity.ok(careGivers);
     }
 
