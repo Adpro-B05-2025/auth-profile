@@ -23,6 +23,9 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 
@@ -220,7 +223,8 @@ class ProfileControllerTest {
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"))).thenReturn(caregivers);
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(null), eq(null)))
+                .thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
@@ -229,6 +233,82 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
                 .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void searchCareGiversBySchedule() throws Exception {
+        // Create lite profile response for search result
+        ProfileResponse caregiver = new ProfileResponse();
+        caregiver.setId(2L);
+        caregiver.setEmail("doctor1@example.com");
+        caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
+        caregiver.setUserType("CAREGIVER");
+        caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
+
+        List<ProfileResponse> caregivers = Arrays.asList(caregiver);
+
+        // Set up day and time for search
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        // Format the time for the HTTP request
+        String timeString = time.format(DateTimeFormatter.ISO_TIME); // Formats as 10:00:00
+
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(dayOfWeek), eq(time)))
+                .thenReturn(caregivers);
+
+        mockMvc.perform(get("/api/caregiver/search")
+                        .param("name", "Doctor")
+                        .param("speciality", "Cardiology")
+                        .param("dayOfWeek", dayOfWeek.toString())
+                        .param("time", timeString))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
+                .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void searchCareGiversByDayOnly() throws Exception {
+        // Create lite profile response for search result
+        ProfileResponse caregiver = new ProfileResponse();
+        caregiver.setId(2L);
+        caregiver.setEmail("doctor1@example.com");
+        caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
+        caregiver.setUserType("CAREGIVER");
+        caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
+
+        List<ProfileResponse> caregivers = Arrays.asList(caregiver);
+
+        // Set up day for search
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+
+        when(profileService.searchCareGiversLite(eq(null), eq(null), eq(dayOfWeek), eq(null)))
+                .thenReturn(caregivers);
+
+        mockMvc.perform(get("/api/caregiver/search")
+                        .param("dayOfWeek", dayOfWeek.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
+                .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
                 .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
                 .andExpect(jsonPath("$[0].nik").doesNotExist());
     }
