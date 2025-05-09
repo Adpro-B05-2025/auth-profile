@@ -6,10 +6,10 @@ import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
+import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
-import id.ac.ui.cs.advprog.authprofile.service.impl.ProfileServiceImpl;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +22,8 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,8 +59,10 @@ class ProfileServiceImplTest {
     private User user;
     private Pacillian pacillian;
     private CareGiver careGiver;
+    private CareGiver careGiver2;
     private UpdateProfileRequest updateRequest;
     private List<CareGiver> careGivers;
+    private WorkingSchedule workingSchedule;
 
     @BeforeEach
     void setUp() {
@@ -104,8 +108,36 @@ class ProfileServiceImplTest {
         doctorRoles.add(doctorRole);
         careGiver.setRoles(doctorRoles);
 
+        // Add working schedule
+        workingSchedule = new WorkingSchedule();
+        workingSchedule.setId(1L);
+        workingSchedule.setDayOfWeek(DayOfWeek.MONDAY);
+        workingSchedule.setStartTime(LocalTime.of(9, 0));
+        workingSchedule.setEndTime(LocalTime.of(17, 0));
+        workingSchedule.setAvailable(true);
+        workingSchedule.setCareGiver(careGiver);
+
+        List<WorkingSchedule> schedules = new ArrayList<>();
+        schedules.add(workingSchedule);
+        careGiver.setWorkingSchedules(schedules);
+
+        // Create a second caregiver for testing multiple results
+        careGiver2 = new CareGiver();
+        careGiver2.setId(4L);
+        careGiver2.setEmail("doctor2@example.com");
+        careGiver2.setName("Dr. Smith");
+        careGiver2.setNik("4567890123456789");
+        careGiver2.setAddress("Another Hospital Address");
+        careGiver2.setPhoneNumber("084567890123");
+        careGiver2.setSpeciality("Neurology");
+        careGiver2.setWorkAddress("City Hospital");
+        careGiver2.setAverageRating(4.8);
+        careGiver2.setRoles(doctorRoles);
+        careGiver2.setWorkingSchedules(new ArrayList<>());
+
         careGivers = new ArrayList<>();
         careGivers.add(careGiver);
+        careGivers.add(careGiver2);
 
         updateRequest = new UpdateProfileRequest();
         updateRequest.setName("Updated Name");
@@ -214,9 +246,11 @@ class ProfileServiceImplTest {
         List<ProfileResponse> responses = profileServiceImpl.getAllCareGivers();
 
         // then
-        assertThat(responses).hasSize(1);
+        assertThat(responses).hasSize(2);
         assertThat(responses.get(0).getEmail()).isEqualTo("caregiver@example.com");
         assertThat(responses.get(0).getSpeciality()).isEqualTo("General");
+        assertThat(responses.get(1).getEmail()).isEqualTo("doctor2@example.com");
+        assertThat(responses.get(1).getSpeciality()).isEqualTo("Neurology");
 
         verify(careGiverRepository).findAll();
     }
@@ -224,7 +258,7 @@ class ProfileServiceImplTest {
     @Test
     void searchCareGivers_ByNameAndSpeciality_ShouldReturnListOfProfileResponses() {
         // given
-        when(careGiverRepository.findByNameAndSpeciality("test", "general")).thenReturn(careGivers);
+        when(careGiverRepository.findByNameAndSpeciality("test", "general")).thenReturn(Arrays.asList(careGiver));
 
         // when
         List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", "general");
@@ -239,7 +273,7 @@ class ProfileServiceImplTest {
     @Test
     void searchCareGivers_ByNameOnly_ShouldReturnListOfProfileResponses() {
         // given
-        when(careGiverRepository.findByNameContainingIgnoreCase("test")).thenReturn(careGivers);
+        when(careGiverRepository.findByNameContainingIgnoreCase("test")).thenReturn(Arrays.asList(careGiver));
 
         // when
         List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", null);
@@ -254,7 +288,7 @@ class ProfileServiceImplTest {
     @Test
     void searchCareGivers_BySpecialityOnly_ShouldReturnListOfProfileResponses() {
         // given
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase("general")).thenReturn(careGivers);
+        when(careGiverRepository.findBySpecialityContainingIgnoreCase("general")).thenReturn(Arrays.asList(careGiver));
 
         // when
         List<ProfileResponse> responses = profileServiceImpl.searchCareGivers(null, "general");
@@ -275,8 +309,9 @@ class ProfileServiceImplTest {
         List<ProfileResponse> responses = profileServiceImpl.searchCareGivers(null, null);
 
         // then
-        assertThat(responses).hasSize(1);
+        assertThat(responses).hasSize(2);
         assertThat(responses.get(0).getEmail()).isEqualTo("caregiver@example.com");
+        assertThat(responses.get(1).getEmail()).isEqualTo("doctor2@example.com");
 
         verify(careGiverRepository).findAll();
     }
@@ -403,5 +438,158 @@ class ProfileServiceImplTest {
         verify(userRepository, never()).save(any(User.class));
         verify(pacillianRepository, never()).save(any(Pacillian.class));
         verify(careGiverRepository, never()).save(any(CareGiver.class));
+    }
+
+    // New tests for the getAllCareGiversLite method
+    @Test
+    void getAllCareGiversLite_ShouldReturnLiteProfileResponses() {
+        // given
+        when(careGiverRepository.findAll()).thenReturn(careGivers);
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.getAllCareGiversLite();
+
+        // then
+        assertThat(responses).hasSize(2);
+
+        // Verify first caregiver response
+        ProfileResponse firstResponse = responses.get(0);
+        assertThat(firstResponse.getId()).isEqualTo(careGiver.getId());
+        assertThat(firstResponse.getName()).isEqualTo(careGiver.getName());
+        assertThat(firstResponse.getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(firstResponse.getPhoneNumber()).isEqualTo(careGiver.getPhoneNumber());
+        assertThat(firstResponse.getSpeciality()).isEqualTo(careGiver.getSpeciality());
+        assertThat(firstResponse.getWorkAddress()).isEqualTo(careGiver.getWorkAddress());
+        assertThat(firstResponse.getAverageRating()).isEqualTo(careGiver.getAverageRating());
+
+        // Verify sensitive info is null
+        assertThat(firstResponse.getNik()).isNull();
+        assertThat(firstResponse.getAddress()).isNull();
+
+        // Verify working schedules
+        assertThat(firstResponse.getWorkingSchedules()).hasSize(1);
+        assertThat(firstResponse.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
+        assertThat(firstResponse.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(firstResponse.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(17, 0));
+        assertThat(firstResponse.getWorkingSchedules().get(0).isAvailable()).isEqualTo(true);
+
+        // Verify second caregiver response
+        ProfileResponse secondResponse = responses.get(1);
+        assertThat(secondResponse.getId()).isEqualTo(careGiver2.getId());
+        assertThat(secondResponse.getName()).isEqualTo(careGiver2.getName());
+        assertThat(secondResponse.getEmail()).isEqualTo(careGiver2.getEmail());
+        assertThat(secondResponse.getWorkingSchedules()).isNotNull();
+        assertThat(secondResponse.getWorkingSchedules()).isEmpty();
+
+        verify(careGiverRepository).findAll();
+    }
+
+    // New tests for all searchCareGiversLite method cases
+    @Test
+    void searchCareGiversLite_ByNameAndSpeciality_ShouldReturnLiteProfiles() {
+        // given
+        when(careGiverRepository.findByNameAndSpeciality("test", "general")).thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite("test", "general");
+
+        // then
+        assertThat(responses).hasSize(1);
+
+        ProfileResponse response = responses.get(0);
+        assertThat(response.getId()).isEqualTo(careGiver.getId());
+        assertThat(response.getName()).isEqualTo(careGiver.getName());
+        assertThat(response.getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(response.getPhoneNumber()).isEqualTo(careGiver.getPhoneNumber());
+        assertThat(response.getSpeciality()).isEqualTo(careGiver.getSpeciality());
+        assertThat(response.getNik()).isNull();
+        assertThat(response.getAddress()).isNull();
+
+        verify(careGiverRepository).findByNameAndSpeciality("test", "general");
+    }
+
+    @Test
+    void searchCareGiversLite_ByNameOnly_ShouldReturnLiteProfiles() {
+        // given
+        when(careGiverRepository.findByNameContainingIgnoreCase("test")).thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite("test", null);
+
+        // then
+        assertThat(responses).hasSize(1);
+
+        ProfileResponse response = responses.get(0);
+        assertThat(response.getId()).isEqualTo(careGiver.getId());
+        assertThat(response.getName()).isEqualTo(careGiver.getName());
+        assertThat(response.getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(response.getNik()).isNull();
+
+        verify(careGiverRepository).findByNameContainingIgnoreCase("test");
+    }
+
+    @Test
+    void searchCareGiversLite_BySpecialityOnly_ShouldReturnLiteProfiles() {
+        // given
+        when(careGiverRepository.findBySpecialityContainingIgnoreCase("general")).thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, "general");
+
+        // then
+        assertThat(responses).hasSize(1);
+
+        ProfileResponse response = responses.get(0);
+        assertThat(response.getId()).isEqualTo(careGiver.getId());
+        assertThat(response.getSpeciality()).isEqualTo(careGiver.getSpeciality());
+        assertThat(response.getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(response.getNik()).isNull();
+
+        verify(careGiverRepository).findBySpecialityContainingIgnoreCase("general");
+    }
+
+    @Test
+    void searchCareGiversLite_WithNoFilters_ShouldReturnAllLiteProfiles() {
+        // given
+        when(careGiverRepository.findAll()).thenReturn(careGivers);
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null);
+
+        // then
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(responses.get(1).getEmail()).isEqualTo(careGiver2.getEmail());
+
+        // Verify all responses have sensitive info nullified
+        for (ProfileResponse response : responses) {
+            assertThat(response.getNik()).isNull();
+            assertThat(response.getAddress()).isNull();
+        }
+
+        verify(careGiverRepository).findAll();
+    }
+
+    @Test
+    void createLiteProfileResponse_WithNullWorkingSchedules_ShouldHandleGracefully() {
+        // given
+        CareGiver careGiverWithNullSchedules = new CareGiver();
+        careGiverWithNullSchedules.setId(5L);
+        careGiverWithNullSchedules.setEmail("nullschedules@example.com");
+        careGiverWithNullSchedules.setName("Dr. Null");
+        careGiverWithNullSchedules.setWorkingSchedules(null); // Explicitly set to null
+
+        List<CareGiver> careGiversWithNull = Arrays.asList(careGiverWithNullSchedules);
+        when(careGiverRepository.findAll()).thenReturn(careGiversWithNull);
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.getAllCareGiversLite();
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getWorkingSchedules()).isNotNull();
+        assertThat(responses.get(0).getWorkingSchedules()).isEmpty();
+
+        verify(careGiverRepository).findAll();
     }
 }
