@@ -16,6 +16,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -217,6 +219,39 @@ public class ProfileServiceImpl implements IProfileService {
         // No need for type check since repository is already typed to CareGiver
 
         return createLiteProfileResponse(careGiver);
+    }
+
+    @Override
+    public List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time) {
+        List<CareGiver> careGivers;
+
+        // Handle all possible combinations of search parameters
+        if (dayOfWeek != null && time != null) {
+            // When schedule filtering is requested
+            if (name != null && speciality != null) {
+                // Search by name, speciality, day and time
+                careGivers = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time);
+            } else if (name != null) {
+                // Search by name, day and time
+                careGivers = careGiverRepository.findByNameAndAvailableDayAndTime(name, dayOfWeek, time);
+            } else if (speciality != null) {
+                // Search by speciality, day and time
+                careGivers = careGiverRepository.findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time);
+            } else {
+                // Search by day and time only
+                careGivers = careGiverRepository.findByAvailableDayAndTime(dayOfWeek, time);
+            }
+        } else if (dayOfWeek != null) {
+            // Search by day only
+            careGivers = careGiverRepository.findByAvailableDayOfWeek(dayOfWeek);
+        } else {
+            // Fall back to existing search without schedule filtering
+            return searchCareGiversLite(name, speciality);
+        }
+
+        return careGivers.stream()
+                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .collect(Collectors.toList());
     }
 
 
