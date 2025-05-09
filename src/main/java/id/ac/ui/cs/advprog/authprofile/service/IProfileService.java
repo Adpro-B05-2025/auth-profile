@@ -60,4 +60,11 @@ public interface IProfileService {
      * @return list of matching care givers with minimal information
      */
     List<ProfileResponse> searchCareGiversLite(String name, String speciality);
+
+    /**
+     * Get a specific caregiver's profile by ID with sensitive information hidden
+     * @param caregiverId the caregiver ID
+     * @return the lite profile response with sensitive fields hidden
+     */
+    ProfileResponse getCareGiverProfileLite(Long caregiverId);
 }

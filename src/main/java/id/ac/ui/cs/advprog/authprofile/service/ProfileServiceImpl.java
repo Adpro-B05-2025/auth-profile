@@ -209,5 +209,15 @@ public class ProfileServiceImpl implements IProfileService {
         return response;
     }
 
+    @Override
+    public ProfileResponse getCareGiverProfileLite(Long caregiverId) {
+        CareGiver careGiver = careGiverRepository.findById(caregiverId)
+                .orElseThrow(() -> new EntityNotFoundException("Caregiver not found with id: " + caregiverId));
+
+        // No need for type check since repository is already typed to CareGiver
+
+        return createLiteProfileResponse(careGiver);
+    }
+
 
 }
