@@ -9,6 +9,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -261,5 +262,51 @@ class ProfileControllerTest {
 
         mockMvc.perform(get("/api/profile"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser // No specific role needed
+    void getCareGiverProfile_ShouldReturnLiteProfile() throws Exception {
+        Long caregiverId = 3L;
+
+        // Create lite profile response for caregiver
+        ProfileResponse caregiverProfile = new ProfileResponse();
+        caregiverProfile.setId(caregiverId);
+        caregiverProfile.setEmail("caregiver@example.com");
+        caregiverProfile.setName("Dr. Test");
+        caregiverProfile.setPhoneNumber("083456789012");
+        caregiverProfile.setUserType("CAREGIVER");
+        caregiverProfile.setSpeciality("General");
+        caregiverProfile.setWorkAddress("Test Hospital");
+        caregiverProfile.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiverProfile.setNik(null);
+        caregiverProfile.setAddress(null);
+
+        when(profileService.getCareGiverProfileLite(eq(caregiverId))).thenReturn(caregiverProfile);
+
+        mockMvc.perform(get("/api/caregiver/{id}", caregiverId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(caregiverProfile.getId()))
+                .andExpect(jsonPath("$.email").value(caregiverProfile.getEmail()))
+                .andExpect(jsonPath("$.name").value(caregiverProfile.getName()))
+                .andExpect(jsonPath("$.phoneNumber").value(caregiverProfile.getPhoneNumber()))
+                .andExpect(jsonPath("$.userType").value(caregiverProfile.getUserType()))
+                .andExpect(jsonPath("$.speciality").value(caregiverProfile.getSpeciality()))
+                .andExpect(jsonPath("$.workAddress").value(caregiverProfile.getWorkAddress()))
+                .andExpect(jsonPath("$.averageRating").value(caregiverProfile.getAverageRating()))
+                .andExpect(jsonPath("$.nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser
+    void getCareGiverProfile_WithNonExistentId_ShouldReturnNotFound() throws Exception {
+        Long nonExistentId = 999L;
+
+        when(profileService.getCareGiverProfileLite(eq(nonExistentId)))
+                .thenThrow(new EntityNotFoundException("Caregiver not found with id: " + nonExistentId));
+
+        mockMvc.perform(get("/api/caregiver/{id}", nonExistentId))
+                .andExpect(status().isNotFound());
     }
 }
