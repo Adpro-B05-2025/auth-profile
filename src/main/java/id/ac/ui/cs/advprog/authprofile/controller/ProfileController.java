@@ -69,4 +69,14 @@ public class ProfileController {
         ProfileResponse profile = profileService.getUserProfile(id);
         return ResponseEntity.ok(profile);
     }
+
+    @GetMapping("/caregiver/{id}")
+    @RequiresAuthorization(
+            action = "VIEW_CAREGIVER",
+            resourceIdExpression = "#args[0]" // This gets the id path variable
+    )
+    public ResponseEntity<ProfileResponse> getCareGiverProfile(@PathVariable Long id) {
+        ProfileResponse profile = profileService.getCareGiverProfileLite(id);
+        return ResponseEntity.ok(profile);
+    }
 }
