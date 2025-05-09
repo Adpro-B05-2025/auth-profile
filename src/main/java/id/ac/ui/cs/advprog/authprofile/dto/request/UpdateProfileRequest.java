@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.dto.request;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,6 +14,10 @@ public class UpdateProfileRequest {
     @NotBlank(message = "Name is required")
     private String name;
 
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email should be valid")
+    private String email;
+
     @NotBlank(message = "Address is required")
     private String address;
 
@@ -25,4 +30,5 @@ public class UpdateProfileRequest {
     // Additional fields for CareGiver
     private String speciality;
     private String workAddress;
+
 }
