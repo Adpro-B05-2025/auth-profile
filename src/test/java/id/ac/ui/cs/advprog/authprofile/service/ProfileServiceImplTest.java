@@ -592,4 +592,62 @@ class ProfileServiceImplTest {
 
         verify(careGiverRepository).findAll();
     }
+
+    @Test
+    void getCareGiverProfileLite_ShouldReturnLiteProfileResponse() {
+        // given
+        Long caregiverId = 3L;
+        when(careGiverRepository.findById(caregiverId)).thenReturn(Optional.of(careGiver));
+
+        // when
+        ProfileResponse response = profileServiceImpl.getCareGiverProfileLite(caregiverId);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(caregiverId);
+        assertThat(response.getName()).isEqualTo(careGiver.getName());
+        assertThat(response.getEmail()).isEqualTo(careGiver.getEmail());
+        assertThat(response.getPhoneNumber()).isEqualTo(careGiver.getPhoneNumber());
+        assertThat(response.getSpeciality()).isEqualTo(careGiver.getSpeciality());
+        assertThat(response.getWorkAddress()).isEqualTo(careGiver.getWorkAddress());
+
+        // Verify sensitive info is null
+        assertThat(response.getNik()).isNull();
+        assertThat(response.getAddress()).isNull();
+
+        // Verify working schedules
+        assertThat(response.getWorkingSchedules()).hasSize(1);
+
+        verify(careGiverRepository).findById(caregiverId);
+    }
+
+    @Test
+    void getCareGiverProfileLite_WithNonExistentId_ShouldThrowException() {
+        // given
+        Long nonExistentId = 999L;
+        when(careGiverRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
+        // when/then
+        assertThatThrownBy(() -> profileServiceImpl.getCareGiverProfileLite(nonExistentId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("Caregiver not found with id: " + nonExistentId);
+
+        verify(careGiverRepository).findById(nonExistentId);
+    }
+
+    @Test
+    void getCareGiverProfileLite_WithRegularUserId_ShouldThrowException() {
+        // given
+        Long userId = 1L;
+
+        // Mock that the repository returns empty for this ID (no caregiver found)
+        when(careGiverRepository.findById(userId)).thenReturn(Optional.empty());
+
+        // when/then
+        assertThatThrownBy(() -> profileServiceImpl.getCareGiverProfileLite(userId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("Caregiver not found with id: " + userId);
+
+        verify(careGiverRepository).findById(userId);
+    }
 }
