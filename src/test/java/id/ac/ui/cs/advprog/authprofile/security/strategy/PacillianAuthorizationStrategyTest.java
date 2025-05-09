@@ -93,15 +93,21 @@ class PacillianAuthorizationStrategyTest {
     }
 
     @Test
-    void whenPacillianViewsCareGiverProfile_thenReturnTrue() {
+    void whenPacillianViewsCareGiverProfile_thenReturnFalse() {
         boolean result = strategy.isAuthorized(pacillian, 3L, "VIEW_PROFILE");
-        assertTrue(result, "Pacillian should be able to view caregiver profiles");
+        assertFalse(result, "Pacillian should not be able to view caregiver profiles through VIEW_PROFILE action");
     }
 
     @Test
-    void whenPacillianViewsCareGiver_thenReturnTrue() {
+    void whenPacillianViewsCareGiverWithViewCaregiverAction_thenReturnTrue() {
         boolean result = strategy.isAuthorized(pacillian, 3L, "VIEW_CAREGIVER");
-        assertTrue(result, "Pacillian should be able to view caregiver profiles");
+        assertTrue(result, "Pacillian should be able to view caregiver profiles through VIEW_CAREGIVER action");
+    }
+
+    @Test
+    void whenPacillianViewsCareGiverWithViewCaregiverActionAndNullResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(pacillian, null, "VIEW_CAREGIVER");
+        assertTrue(result, "Pacillian should be able to access caregiver listing endpoints");
     }
 
     @Test
