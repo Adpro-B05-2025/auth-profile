@@ -9,6 +9,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,9 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 
@@ -155,29 +159,46 @@ class ProfileControllerTest {
     @Test
     @WithMockUser(roles = "PACILLIAN")
     void getAllCareGivers() throws Exception {
+        // Create lite profile responses for caregivers
         ProfileResponse caregiver1 = new ProfileResponse();
         caregiver1.setId(2L);
         caregiver1.setEmail("doctor1@example.com");
         caregiver1.setName("Doctor One");
+        caregiver1.setPhoneNumber("081234567890");
         caregiver1.setUserType("CAREGIVER");
         caregiver1.setSpeciality("Cardiology");
+        caregiver1.setWorkAddress("Hospital A");
+        caregiver1.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver1.setNik(null);
+        caregiver1.setAddress(null);
 
         ProfileResponse caregiver2 = new ProfileResponse();
         caregiver2.setId(3L);
         caregiver2.setEmail("doctor2@example.com");
         caregiver2.setName("Doctor Two");
+        caregiver2.setPhoneNumber("082345678901");
         caregiver2.setUserType("CAREGIVER");
         caregiver2.setSpeciality("Neurology");
+        caregiver2.setWorkAddress("Hospital B");
+        caregiver2.setAverageRating(4.8);
+        // Leave sensitive fields null
+        caregiver2.setNik(null);
+        caregiver2.setAddress(null);
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver1, caregiver2);
 
-        when(profileService.getAllCareGivers()).thenReturn(caregivers);
+        when(profileService.getAllCareGiversLite()).thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/all"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver1.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver1.getEmail()))
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver1.getPhoneNumber()))
                 .andExpect(jsonPath("$[0].speciality").value(caregiver1.getSpeciality()))
+                .andExpect(jsonPath("$[0].workAddress").value(caregiver1.getWorkAddress()))
+                .andExpect(jsonPath("$[0].averageRating").value(caregiver1.getAverageRating()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist())
                 .andExpect(jsonPath("$[1].id").value(caregiver2.getId()))
                 .andExpect(jsonPath("$[1].email").value(caregiver2.getEmail()))
                 .andExpect(jsonPath("$[1].speciality").value(caregiver2.getSpeciality()));
@@ -186,16 +207,24 @@ class ProfileControllerTest {
     @Test
     @WithMockUser(roles = "PACILLIAN")
     void searchCareGivers() throws Exception {
+        // Create lite profile response for search result
         ProfileResponse caregiver = new ProfileResponse();
         caregiver.setId(2L);
         caregiver.setEmail("doctor1@example.com");
         caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
         caregiver.setUserType("CAREGIVER");
         caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        when(profileService.searchCareGivers(eq("Doctor"), eq("Cardiology"))).thenReturn(caregivers);
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(null), eq(null)))
+                .thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
@@ -203,7 +232,85 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
-                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()));
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void searchCareGiversBySchedule() throws Exception {
+        // Create lite profile response for search result
+        ProfileResponse caregiver = new ProfileResponse();
+        caregiver.setId(2L);
+        caregiver.setEmail("doctor1@example.com");
+        caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
+        caregiver.setUserType("CAREGIVER");
+        caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
+
+        List<ProfileResponse> caregivers = Arrays.asList(caregiver);
+
+        // Set up day and time for search
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        // Format the time for the HTTP request
+        String timeString = time.format(DateTimeFormatter.ISO_TIME); // Formats as 10:00:00
+
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(dayOfWeek), eq(time)))
+                .thenReturn(caregivers);
+
+        mockMvc.perform(get("/api/caregiver/search")
+                        .param("name", "Doctor")
+                        .param("speciality", "Cardiology")
+                        .param("dayOfWeek", dayOfWeek.toString())
+                        .param("time", timeString))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
+                .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void searchCareGiversByDayOnly() throws Exception {
+        // Create lite profile response for search result
+        ProfileResponse caregiver = new ProfileResponse();
+        caregiver.setId(2L);
+        caregiver.setEmail("doctor1@example.com");
+        caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
+        caregiver.setUserType("CAREGIVER");
+        caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
+
+        List<ProfileResponse> caregivers = Arrays.asList(caregiver);
+
+        // Set up day for search
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+
+        when(profileService.searchCareGiversLite(eq(null), eq(null), eq(dayOfWeek), eq(null)))
+                .thenReturn(caregivers);
+
+        mockMvc.perform(get("/api/caregiver/search")
+                        .param("dayOfWeek", dayOfWeek.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
+                .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
     }
 
     @Test
@@ -235,5 +342,51 @@ class ProfileControllerTest {
 
         mockMvc.perform(get("/api/profile"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser // No specific role needed
+    void getCareGiverProfile_ShouldReturnLiteProfile() throws Exception {
+        Long caregiverId = 3L;
+
+        // Create lite profile response for caregiver
+        ProfileResponse caregiverProfile = new ProfileResponse();
+        caregiverProfile.setId(caregiverId);
+        caregiverProfile.setEmail("caregiver@example.com");
+        caregiverProfile.setName("Dr. Test");
+        caregiverProfile.setPhoneNumber("083456789012");
+        caregiverProfile.setUserType("CAREGIVER");
+        caregiverProfile.setSpeciality("General");
+        caregiverProfile.setWorkAddress("Test Hospital");
+        caregiverProfile.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiverProfile.setNik(null);
+        caregiverProfile.setAddress(null);
+
+        when(profileService.getCareGiverProfileLite(eq(caregiverId))).thenReturn(caregiverProfile);
+
+        mockMvc.perform(get("/api/caregiver/{id}", caregiverId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(caregiverProfile.getId()))
+                .andExpect(jsonPath("$.email").value(caregiverProfile.getEmail()))
+                .andExpect(jsonPath("$.name").value(caregiverProfile.getName()))
+                .andExpect(jsonPath("$.phoneNumber").value(caregiverProfile.getPhoneNumber()))
+                .andExpect(jsonPath("$.userType").value(caregiverProfile.getUserType()))
+                .andExpect(jsonPath("$.speciality").value(caregiverProfile.getSpeciality()))
+                .andExpect(jsonPath("$.workAddress").value(caregiverProfile.getWorkAddress()))
+                .andExpect(jsonPath("$.averageRating").value(caregiverProfile.getAverageRating()))
+                .andExpect(jsonPath("$.nik").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser
+    void getCareGiverProfile_WithNonExistentId_ShouldReturnNotFound() throws Exception {
+        Long nonExistentId = 999L;
+
+        when(profileService.getCareGiverProfileLite(eq(nonExistentId)))
+                .thenThrow(new EntityNotFoundException("Caregiver not found with id: " + nonExistentId));
+
+        mockMvc.perform(get("/api/caregiver/{id}", nonExistentId))
+                .andExpect(status().isNotFound());
     }
 }
