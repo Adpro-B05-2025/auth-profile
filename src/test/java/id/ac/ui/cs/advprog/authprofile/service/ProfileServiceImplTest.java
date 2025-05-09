@@ -650,4 +650,131 @@ class ProfileServiceImplTest {
 
         verify(careGiverRepository).findById(userId);
     }
+
+    @Test
+    void searchCareGiversLite_BySchedule_ShouldReturnMatchingCareGivers() {
+        // given
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        when(careGiverRepository.findByAvailableDayAndTime(dayOfWeek, time))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, time);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
+        assertThat(responses.get(0).getName()).isEqualTo(careGiver.getName());
+
+        // Verify repository was called with correct parameters
+        verify(careGiverRepository).findByAvailableDayAndTime(dayOfWeek, time);
+    }
+
+    @Test
+    void searchCareGiversLite_ByNameAndSchedule_ShouldReturnMatchingCareGivers() {
+        // given
+        String name = "test";
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        when(careGiverRepository.findByNameAndAvailableDayAndTime(name, dayOfWeek, time))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, null, dayOfWeek, time);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
+
+        // Verify repository was called with correct parameters
+        verify(careGiverRepository).findByNameAndAvailableDayAndTime(name, dayOfWeek, time);
+    }
+
+    @Test
+    void searchCareGiversLite_BySpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
+        // given
+        String speciality = "general";
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        when(careGiverRepository.findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, speciality, dayOfWeek, time);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
+
+        // Verify repository was called with correct parameters
+        verify(careGiverRepository).findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time);
+    }
+
+    @Test
+    void searchCareGiversLite_ByNameSpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
+        // given
+        String name = "test";
+        String speciality = "general";
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
+
+        when(careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, speciality, dayOfWeek, time);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
+
+        // Verify repository was called with correct parameters
+        verify(careGiverRepository).findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time);
+    }
+
+    @Test
+    void searchCareGiversLite_ByDayOnly_ShouldReturnMatchingCareGivers() {
+        // given
+        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
+
+        when(careGiverRepository.findByAvailableDayOfWeek(dayOfWeek))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when
+        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, null);
+
+        // then
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
+
+        // Verify repository was called with correct parameters
+        verify(careGiverRepository).findByAvailableDayOfWeek(dayOfWeek);
+    }
+
+    @Test
+    void searchCareGiversLite_WithoutScheduleParams_ShouldDelegateToOriginalMethod() {
+        // given
+        String name = "test";
+        String speciality = "general";
+
+        // Create a spy of the service implementation
+        ProfileServiceImpl spyService = spy(profileServiceImpl);
+
+        // Mock the repository since we're using a spy
+        when(careGiverRepository.findByNameAndSpeciality(name, speciality))
+                .thenReturn(Arrays.asList(careGiver));
+
+        // when - call the 4-param version with null schedule params
+        List<ProfileResponse> responses = spyService.searchCareGiversLite(name, speciality, null, null);
+
+        // then
+        assertThat(responses).hasSize(1);
+
+        // Verify the delegation happened
+        verify(spyService).searchCareGiversLite(name, speciality);
+    }
 }
