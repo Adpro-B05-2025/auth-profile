@@ -1,4 +1,4 @@
-package id.ac.ui.cs.advprog.authprofile.service.impl;
+package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
@@ -16,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -145,4 +146,68 @@ public class ProfileServiceImpl implements IProfileService {
             return principal.toString();
         }
     }
+    @Override
+    public List<ProfileResponse> getAllCareGiversLite() {
+        List<CareGiver> careGivers = careGiverRepository.findAll();
+        return careGivers.stream()
+                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ProfileResponse> searchCareGiversLite(String name, String speciality) {
+        List<CareGiver> careGivers;
+
+        if (name != null && speciality != null) {
+            careGivers = careGiverRepository.findByNameAndSpeciality(name, speciality);
+        } else if (name != null) {
+            careGivers = careGiverRepository.findByNameContainingIgnoreCase(name);
+        } else if (speciality != null) {
+            careGivers = careGiverRepository.findBySpecialityContainingIgnoreCase(speciality);
+        } else {
+            careGivers = careGiverRepository.findAll();
+        }
+
+        return careGivers.stream()
+                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Creates a lite version of ProfileResponse with only essential information
+     * @param careGiver the caregiver entity
+     * @return a ProfileResponse with only essential fields populated
+     */
+    private ProfileResponse createLiteProfileResponse(CareGiver careGiver) {
+        ProfileResponse response = new ProfileResponse();
+        response.setId(careGiver.getId());
+        response.setEmail(careGiver.getEmail());
+        response.setName(careGiver.getName());
+        // Set NIK and address to null for security
+        response.setNik(null);
+        response.setAddress(null);
+        response.setPhoneNumber(careGiver.getPhoneNumber());
+        response.setUserType("CAREGIVER");
+        response.setSpeciality(careGiver.getSpeciality());
+        response.setWorkAddress(careGiver.getWorkAddress());
+        response.setAverageRating(careGiver.getAverageRating());
+
+        // Map working schedules
+        List<ProfileResponse.WorkingScheduleDto> schedules = new ArrayList<>();
+        if (careGiver.getWorkingSchedules() != null) {
+            schedules = careGiver.getWorkingSchedules().stream()
+                    .map(schedule -> new ProfileResponse.WorkingScheduleDto(
+                            schedule.getDayOfWeek(),
+                            schedule.getStartTime(),
+                            schedule.getEndTime(),
+                            schedule.isAvailable()
+                    ))
+                    .collect(Collectors.toList());
+        }
+        response.setWorkingSchedules(schedules);
+
+        return response;
+    }
+
+
 }

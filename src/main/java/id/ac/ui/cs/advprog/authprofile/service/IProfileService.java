@@ -45,4 +45,19 @@ public interface IProfileService {
      * Delete the current user's account
      */
     void deleteCurrentUserAccount();
+
+
+    /**
+     * Get all CareGivers with only essential information for listing
+     * @return list of all care givers with minimal information
+     */
+    List<ProfileResponse> getAllCareGiversLite();
+
+    /**
+     * Search CareGivers by name and speciality with only essential information
+     * @param name the name to search for (optional)
+     * @param speciality the speciality to search for (optional)
+     * @return list of matching care givers with minimal information
+     */
+    List<ProfileResponse> searchCareGiversLite(String name, String speciality);
 }
