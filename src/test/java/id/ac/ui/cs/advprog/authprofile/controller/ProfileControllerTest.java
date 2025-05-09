@@ -155,29 +155,46 @@ class ProfileControllerTest {
     @Test
     @WithMockUser(roles = "PACILLIAN")
     void getAllCareGivers() throws Exception {
+        // Create lite profile responses for caregivers
         ProfileResponse caregiver1 = new ProfileResponse();
         caregiver1.setId(2L);
         caregiver1.setEmail("doctor1@example.com");
         caregiver1.setName("Doctor One");
+        caregiver1.setPhoneNumber("081234567890");
         caregiver1.setUserType("CAREGIVER");
         caregiver1.setSpeciality("Cardiology");
+        caregiver1.setWorkAddress("Hospital A");
+        caregiver1.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver1.setNik(null);
+        caregiver1.setAddress(null);
 
         ProfileResponse caregiver2 = new ProfileResponse();
         caregiver2.setId(3L);
         caregiver2.setEmail("doctor2@example.com");
         caregiver2.setName("Doctor Two");
+        caregiver2.setPhoneNumber("082345678901");
         caregiver2.setUserType("CAREGIVER");
         caregiver2.setSpeciality("Neurology");
+        caregiver2.setWorkAddress("Hospital B");
+        caregiver2.setAverageRating(4.8);
+        // Leave sensitive fields null
+        caregiver2.setNik(null);
+        caregiver2.setAddress(null);
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver1, caregiver2);
 
-        when(profileService.getAllCareGivers()).thenReturn(caregivers);
+        when(profileService.getAllCareGiversLite()).thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/all"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver1.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver1.getEmail()))
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver1.getPhoneNumber()))
                 .andExpect(jsonPath("$[0].speciality").value(caregiver1.getSpeciality()))
+                .andExpect(jsonPath("$[0].workAddress").value(caregiver1.getWorkAddress()))
+                .andExpect(jsonPath("$[0].averageRating").value(caregiver1.getAverageRating()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist())
                 .andExpect(jsonPath("$[1].id").value(caregiver2.getId()))
                 .andExpect(jsonPath("$[1].email").value(caregiver2.getEmail()))
                 .andExpect(jsonPath("$[1].speciality").value(caregiver2.getSpeciality()));
@@ -186,16 +203,23 @@ class ProfileControllerTest {
     @Test
     @WithMockUser(roles = "PACILLIAN")
     void searchCareGivers() throws Exception {
+        // Create lite profile response for search result
         ProfileResponse caregiver = new ProfileResponse();
         caregiver.setId(2L);
         caregiver.setEmail("doctor1@example.com");
         caregiver.setName("Doctor One");
+        caregiver.setPhoneNumber("081234567890");
         caregiver.setUserType("CAREGIVER");
         caregiver.setSpeciality("Cardiology");
+        caregiver.setWorkAddress("Hospital A");
+        caregiver.setAverageRating(4.5);
+        // Leave sensitive fields null
+        caregiver.setNik(null);
+        caregiver.setAddress(null);
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        when(profileService.searchCareGivers(eq("Doctor"), eq("Cardiology"))).thenReturn(caregivers);
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"))).thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
@@ -203,7 +227,9 @@ class ProfileControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
-                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()));
+                .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
+                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
+                .andExpect(jsonPath("$[0].nik").doesNotExist());
     }
 
     @Test

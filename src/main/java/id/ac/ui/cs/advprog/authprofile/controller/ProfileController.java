@@ -48,7 +48,7 @@ public class ProfileController {
 
     @GetMapping("/caregiver/all")
     public ResponseEntity<List<ProfileResponse>> getAllCareGivers() {
-        List<ProfileResponse> careGivers = profileService.getAllCareGivers();
+        List<ProfileResponse> careGivers = profileService.getAllCareGiversLite();
         return ResponseEntity.ok(careGivers);
     }
 
@@ -56,7 +56,7 @@ public class ProfileController {
     public ResponseEntity<List<ProfileResponse>> searchCareGivers(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String speciality) {
-        List<ProfileResponse> careGivers = profileService.searchCareGivers(name, speciality);
+        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality);
         return ResponseEntity.ok(careGivers);
     }
 
