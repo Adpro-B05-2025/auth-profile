@@ -1,4 +1,4 @@
-package id.ac.ui.cs.advprog.authprofile.service.impl;
+package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
@@ -139,6 +139,20 @@ public class AuthServiceImpl implements IAuthService {
         }
     }
 
+    @Override
+    public JwtResponse regenerateToken(User user) {
+        // Skip authentication and directly generate a token
+        String jwt = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
+
+        // Get user roles
+        List<String> roles = user.getRoles().stream()
+                .map(role -> role.getName().name())
+                .collect(Collectors.toList());
+
+        // Return JWT response
+        return new JwtResponse(jwt, user.getId(), user.getEmail(), user.getName(), roles);
+    }
+
     /**
      * Validates common aspects of registration requests
      * @param registerRequest the request to validate
@@ -151,5 +165,10 @@ public class AuthServiceImpl implements IAuthService {
         if (userRepository.existsByNik(registerRequest.getNik())) {
             throw new ResourceNotFoundException("Error: NIK is already in use!");
         }
+    }
+
+    public String generateTokenWithoutAuthentication(User user) {
+        // Just create a token directly for the user's email
+        return jwtUtils.generateJwtTokenFromUsername(user.getEmail());
     }
 }
