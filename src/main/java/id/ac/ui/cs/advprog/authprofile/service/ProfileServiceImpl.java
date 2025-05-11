@@ -1,7 +1,9 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
+import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.User;
@@ -10,11 +12,14 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -28,15 +33,18 @@ public class ProfileServiceImpl implements IProfileService {
     private final UserRepository userRepository;
     private final PacillianRepository pacillianRepository;
     private final CareGiverRepository careGiverRepository;
+    private final IAuthService authService;
 
     @Autowired
     public ProfileServiceImpl(
             UserRepository userRepository,
             PacillianRepository pacillianRepository,
-            CareGiverRepository careGiverRepository) {
+            CareGiverRepository careGiverRepository,
+            IAuthService authService) {
         this.userRepository = userRepository;
         this.pacillianRepository = pacillianRepository;
         this.careGiverRepository = careGiverRepository;
+        this.authService = authService;
     }
 
     /**
@@ -98,17 +106,31 @@ public class ProfileServiceImpl implements IProfileService {
     /**
      * Update the current user's profile
      */
-    @Override
     @Transactional
     public ProfileResponse updateCurrentUserProfile(UpdateProfileRequest updateRequest) {
-        String email = getCurrentUserEmail();
-        User user = userRepository.findByEmail(email)
+        String currentEmail = getCurrentUserEmail();
+        User user = userRepository.findByEmail(currentEmail)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
+
+        boolean emailChanged = false;
+        String newEmail = null;
+
+        // Check if email is being changed
+        if (!currentEmail.equals(updateRequest.getEmail())) {
+            // Check if new email is already in use by another user
+            if (userRepository.existsByEmail(updateRequest.getEmail())) {
+                throw new EmailAlreadyExistsException("Email is already in use");
+            }
+            newEmail = updateRequest.getEmail(); // Store the new email
+            user.setEmail(updateRequest.getEmail());
+            emailChanged = true;
+        }
 
         user.setName(updateRequest.getName());
         user.setAddress(updateRequest.getAddress());
         user.setPhoneNumber(updateRequest.getPhoneNumber());
 
+        // Save the user first
         if (user instanceof Pacillian pacillian) {
             pacillian.setMedicalHistory(updateRequest.getMedicalHistory());
             pacillianRepository.save(pacillian);
@@ -120,7 +142,46 @@ public class ProfileServiceImpl implements IProfileService {
             userRepository.save(user);
         }
 
+        // Force a flush to ensure changes are written to the database
+        if (user instanceof Pacillian) {
+            pacillianRepository.flush();
+        } else if (user instanceof CareGiver) {
+            careGiverRepository.flush();
+        } else {
+            userRepository.flush();
+        }
+
+        // If email was changed, we need to update the JWT token
+        if (emailChanged) {
+            // Re-fetch the user to ensure we have the latest data
+            user = userRepository.findById(user.getId())
+                    .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
+
+            // Use a direct approach to generate a token instead of going through authentication
+            String jwt = generateJwtTokenForUser(user);
+
+            // Get the current HTTP response to add the new token as a header
+            ServletRequestAttributes requestAttributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (requestAttributes != null) {
+                HttpServletResponse httpResponse = requestAttributes.getResponse();
+                if (httpResponse != null) {
+                    httpResponse.setHeader("Authorization", "Bearer " + jwt);
+                    httpResponse.setHeader("X-Email-Changed", "true");
+                }
+            }
+        }
+
         return ProfileResponse.fromUser(user);
+    }
+
+    /**
+     * Helper method to generate a JWT token for a user without authentication
+     */
+    private String generateJwtTokenForUser(User user) {
+        // This method directly uses JwtUtils to create a token - you need to add this method to JwtUtils
+        // Alternatively, inject JwtUtils into this class and call it directly
+        return authService.generateTokenWithoutAuthentication(user);
     }
 
     /**
