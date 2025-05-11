@@ -14,6 +14,7 @@ class UpdateProfileRequestTest {
         // then
         assertThat(request).isNotNull();
         assertThat(request.getName()).isNull();
+        assertThat(request.getEmail()).isNull();
         assertThat(request.getAddress()).isNull();
         assertThat(request.getPhoneNumber()).isNull();
         assertThat(request.getMedicalHistory()).isNull();
@@ -25,6 +26,7 @@ class UpdateProfileRequestTest {
     void testAllArgsConstructor() {
         // given
         String name = "Updated Name";
+        String email = "updated@example.com";
         String address = "Updated Address";
         String phoneNumber = "0812345678";
         String medicalHistory = "Updated medical history";
@@ -33,12 +35,13 @@ class UpdateProfileRequestTest {
 
         // when
         UpdateProfileRequest request = new UpdateProfileRequest(
-                name, address, phoneNumber, medicalHistory, speciality, workAddress
+                name, email, address, phoneNumber, medicalHistory, speciality, workAddress
         );
 
         // then
         assertThat(request).isNotNull();
         assertThat(request.getName()).isEqualTo(name);
+        assertThat(request.getEmail()).isEqualTo(email);
         assertThat(request.getAddress()).isEqualTo(address);
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
         assertThat(request.getMedicalHistory()).isEqualTo(medicalHistory);
@@ -51,6 +54,7 @@ class UpdateProfileRequestTest {
         // given
         UpdateProfileRequest request = new UpdateProfileRequest();
         String name = "Updated Name";
+        String email = "updated@example.com";
         String address = "Updated Address";
         String phoneNumber = "0812345678";
         String medicalHistory = "Updated medical history";
@@ -59,6 +63,7 @@ class UpdateProfileRequestTest {
 
         // when
         request.setName(name);
+        request.setEmail(email);
         request.setAddress(address);
         request.setPhoneNumber(phoneNumber);
         request.setMedicalHistory(medicalHistory);
@@ -67,6 +72,7 @@ class UpdateProfileRequestTest {
 
         // then
         assertThat(request.getName()).isEqualTo(name);
+        assertThat(request.getEmail()).isEqualTo(email);
         assertThat(request.getAddress()).isEqualTo(address);
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
         assertThat(request.getMedicalHistory()).isEqualTo(medicalHistory);
@@ -78,17 +84,17 @@ class UpdateProfileRequestTest {
     void testEqualsAndHashCode() {
         // given
         UpdateProfileRequest request1 = new UpdateProfileRequest(
-                "Updated Name", "Updated Address", "0812345678",
+                "Updated Name", "updated@example.com", "Updated Address", "0812345678",
                 "Updated medical history", "Updated speciality", "Updated work address"
         );
 
         UpdateProfileRequest request2 = new UpdateProfileRequest(
-                "Updated Name", "Updated Address", "0812345678",
+                "Updated Name", "updated@example.com", "Updated Address", "0812345678",
                 "Updated medical history", "Updated speciality", "Updated work address"
         );
 
         UpdateProfileRequest request3 = new UpdateProfileRequest(
-                "Different Name", "Updated Address", "0812345678",
+                "Different Name", "different@example.com", "Updated Address", "0812345678",
                 "Updated medical history", "Updated speciality", "Updated work address"
         );
 
@@ -103,7 +109,7 @@ class UpdateProfileRequestTest {
     void testToString() {
         // given
         UpdateProfileRequest request = new UpdateProfileRequest(
-                "Updated Name", "Updated Address", "0812345678",
+                "Updated Name", "updated@example.com", "Updated Address", "0812345678",
                 "Updated medical history", "Updated speciality", "Updated work address"
         );
 
@@ -112,6 +118,7 @@ class UpdateProfileRequestTest {
 
         // then
         assertThat(toString).contains("Updated Name");
+        assertThat(toString).contains("updated@example.com");
         assertThat(toString).contains("Updated Address");
         assertThat(toString).contains("0812345678");
         assertThat(toString).contains("Updated medical history");
