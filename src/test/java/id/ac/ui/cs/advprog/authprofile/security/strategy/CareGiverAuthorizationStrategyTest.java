@@ -125,4 +125,19 @@ class CareGiverAuthorizationStrategyTest {
         boolean result = strategy.isAuthorized(careGiver, null, "UNKNOWN_ACTION");
         assertFalse(result, "Unknown actions should not be authorized even with null resourceId");
     }
+
+    @Test
+    void supportsUserTypeReturnsTrueForCareGiver() {
+        assertTrue(strategy.supportsUserType(careGiver), "Strategy should support CareGiver type");
+    }
+
+    @Test
+    void supportsUserTypeReturnsFalseForNonCareGiver() {
+        assertFalse(strategy.supportsUserType(nonCareGiver), "Strategy should not support non-CareGiver type");
+    }
+
+    @Test
+    void supportsUserTypeReturnsFalseForNull() {
+        assertFalse(strategy.supportsUserType(null), "Strategy should not support null user");
+    }
 }

@@ -151,4 +151,24 @@ class PacillianAuthorizationStrategyTest {
         boolean result = strategy.isAuthorized(pacillian, 1L, "UNKNOWN_ACTION");
         assertFalse(result, "Unknown actions should not be authorized");
     }
+
+    @Test
+    void supportsUserTypeReturnsTrueForPacillian() {
+        assertTrue(strategy.supportsUserType(pacillian), "Strategy should support Pacillian type");
+    }
+
+    @Test
+    void supportsUserTypeReturnsFalseForNonPacillian() {
+        assertFalse(strategy.supportsUserType(nonPacillian), "Strategy should not support non-Pacillian type");
+    }
+
+    @Test
+    void supportsUserTypeReturnsFalseForCareGiver() {
+        assertFalse(strategy.supportsUserType(careGiver), "Strategy should not support CareGiver type");
+    }
+
+    @Test
+    void supportsUserTypeReturnsFalseForNull() {
+        assertFalse(strategy.supportsUserType(null), "Strategy should not support null user");
+    }
 }
