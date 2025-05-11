@@ -11,4 +11,11 @@ public interface AuthorizationStrategy {
      * @return true if authorized, false otherwise
      */
     boolean isAuthorized(User user, Long resourceId, String action);
+
+    /**
+     * Determines if this strategy can handle the given user type
+     * @param user the user to check
+     * @return true if this strategy can handle the user type
+     */
+    boolean supportsUserType(User user);
 }

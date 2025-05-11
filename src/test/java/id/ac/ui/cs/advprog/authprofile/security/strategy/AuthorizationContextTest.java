@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.Arrays;
+import java.util.Collections;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -22,7 +25,11 @@ class AuthorizationContextTest {
     @Mock
     private CareGiverAuthorizationStrategy careGiverStrategy;
 
+    @Mock
+    private DefaultAuthorizationStrategy defaultStrategy;
+
     private AuthorizationContext authorizationContext;
+    private AuthorizationContext emptyAuthorizationContext;
 
     private Pacillian pacillian;
     private CareGiver careGiver;
@@ -32,8 +39,7 @@ class AuthorizationContextTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        authorizationContext = new AuthorizationContext(pacillianStrategy, careGiverStrategy);
-
+        // Initialize test users first
         pacillian = new Pacillian();
         pacillian.setId(1L);
 
@@ -42,6 +48,24 @@ class AuthorizationContextTest {
 
         generalUser = new User();
         generalUser.setId(3L);
+
+        // Configure the strategies with specific instances
+        when(pacillianStrategy.supportsUserType(pacillian)).thenReturn(true);
+        when(pacillianStrategy.supportsUserType(careGiver)).thenReturn(false);
+        when(pacillianStrategy.supportsUserType(generalUser)).thenReturn(false);
+
+        when(careGiverStrategy.supportsUserType(pacillian)).thenReturn(false);
+        when(careGiverStrategy.supportsUserType(careGiver)).thenReturn(true);
+        when(careGiverStrategy.supportsUserType(generalUser)).thenReturn(false);
+
+        // DefaultStrategy supports all user types
+        when(defaultStrategy.supportsUserType(any())).thenReturn(true);
+
+        // Create context with strategies in priority order
+        authorizationContext = new AuthorizationContext(
+                Arrays.asList(pacillianStrategy, careGiverStrategy, defaultStrategy));
+
+        emptyAuthorizationContext = new AuthorizationContext(Collections.emptyList());
     }
 
     @Test
@@ -63,10 +87,12 @@ class AuthorizationContextTest {
     }
 
     @Test
-    void whenUserIsNeither_thenReturnFalse() {
+    void whenUserIsNeitherPacillianNorCareGiver_thenUseDefaultStrategy() {
+        when(defaultStrategy.isAuthorized(any(User.class), anyLong(), anyString())).thenReturn(true);
+
         boolean result = authorizationContext.isAuthorized(generalUser, 1L, "VIEW_PROFILE");
 
-        assertFalse(result, "Should return false for unknown user types");
+        assertTrue(result, "Should delegate to default strategy and return its result");
     }
 
     @Test
@@ -85,5 +111,36 @@ class AuthorizationContextTest {
         boolean result = authorizationContext.isAuthorized(careGiver, 1L, "VIEW_PROFILE");
 
         assertFalse(result, "Should return false when CareGiver strategy returns false");
+    }
+
+    @Test
+    void whenDefaultStrategyReturnsFalse_thenContextReturnsFalse() {
+        when(defaultStrategy.isAuthorized(any(User.class), anyLong(), anyString())).thenReturn(false);
+
+        boolean result = authorizationContext.isAuthorized(generalUser, 1L, "VIEW_PROFILE");
+
+        assertFalse(result, "Should return false when default strategy returns false");
+    }
+
+    @Test
+    void whenNoStrategySupportsUserType_thenReturnFalse() {
+        // Test with empty context that has no strategies
+        boolean result = emptyAuthorizationContext.isAuthorized(generalUser, 1L, "VIEW_PROFILE");
+        assertFalse(result, "Should return false when no strategy supports the user type");
+    }
+
+    @Test
+    void whenNullUserProvided_thenReturnFalse() {
+        // Setup all strategies to reject null user
+        when(pacillianStrategy.supportsUserType(null)).thenReturn(false);
+        when(careGiverStrategy.supportsUserType(null)).thenReturn(false);
+        when(defaultStrategy.supportsUserType(null)).thenReturn(false);
+
+        // Create context without default strategy
+        AuthorizationContext contextWithoutDefaultSupport = new AuthorizationContext(
+                Arrays.asList(pacillianStrategy, careGiverStrategy));
+
+        boolean result = contextWithoutDefaultSupport.isAuthorized(null, 1L, "VIEW_PROFILE");
+        assertFalse(result, "Should return false when user is null and no strategy supports it");
     }
 }

@@ -1,13 +1,14 @@
 package id.ac.ui.cs.advprog.authprofile.security.strategy;
 
-import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.User;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Component
+@Order(100)
 public class PacillianAuthorizationStrategy implements AuthorizationStrategy {
 
     private final UserRepository userRepository;
@@ -44,5 +45,10 @@ public class PacillianAuthorizationStrategy implements AuthorizationStrategy {
             default:
                 return false;
         }
+    }
+
+    @Override
+    public boolean supportsUserType(User user) {
+        return user instanceof Pacillian;
     }
 }

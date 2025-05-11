@@ -2,9 +2,11 @@ package id.ac.ui.cs.advprog.authprofile.security.strategy;
 
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.User;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 @Component
+@Order(100)
 public class CareGiverAuthorizationStrategy implements AuthorizationStrategy {
 
     @Override
@@ -32,5 +34,10 @@ public class CareGiverAuthorizationStrategy implements AuthorizationStrategy {
             default:
                 return false;
         }
+    }
+
+    @Override
+    public boolean supportsUserType(User user) {
+        return user instanceof CareGiver;
     }
 }
