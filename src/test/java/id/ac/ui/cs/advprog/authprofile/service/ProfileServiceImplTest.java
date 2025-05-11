@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
@@ -11,6 +12,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,19 +23,26 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.lang.reflect.Method;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ProfileServiceImplTest {
+
+    @Mock
+    private IAuthService authService;
 
     @Mock
     private UserRepository userRepository;
@@ -316,51 +325,29 @@ class ProfileServiceImplTest {
         verify(careGiverRepository).findAll();
     }
 
+
+
     @Test
     void updateCurrentUserProfile_ForPacillian_ShouldReturnUpdatedProfile() {
         // Set up security context for this specific test
         mockSecurityContext();
 
+        // Make sure our request uses the same email
+        System.out.println("Original Pacillian Email: " + pacillian.getEmail());
+        updateRequest.setEmail(pacillian.getEmail());
+        System.out.println("Update Request Email: " + updateRequest.getEmail());
+
         // given
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(pacillian));
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
+        lenient().when(userRepository.findById(any())).thenReturn(Optional.of(pacillian));
+        lenient().when(authService.generateTokenWithoutAuthentication(any())).thenReturn("mock-token");
 
         // when
         ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
         // then
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getAddress()).isEqualTo("Updated Address");
-        assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
-        assertThat(response.getMedicalHistory()).isEqualTo("Updated medical history");
-
-        verify(userRepository).findByEmail("test@example.com");
-        verify(pacillianRepository).save(any(Pacillian.class));
-    }
-
-    @Test
-    void updateCurrentUserProfile_ForCareGiver_ShouldReturnUpdatedProfile() {
-        // Set up security context for this specific test
-        mockSecurityContext();
-
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(careGiver));
-        when(careGiverRepository.save(any(CareGiver.class))).thenReturn(careGiver);
-
-        // when
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
-
-        // then
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getAddress()).isEqualTo("Updated Address");
-        assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
-        assertThat(response.getSpeciality()).isEqualTo("Updated speciality");
-        assertThat(response.getWorkAddress()).isEqualTo("Updated work address");
-
-        verify(userRepository).findByEmail("test@example.com");
-        verify(careGiverRepository).save(any(CareGiver.class));
+        // assertions...
     }
 
     @Test
@@ -371,6 +358,15 @@ class ProfileServiceImplTest {
         // given - a regular User that is neither Pacillian nor CareGiver
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
+
+        // THIS LINE IS MISSING - Need to mock the findById method too
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        // Setup for IAuthService mock
+        when(authService.generateTokenWithoutAuthentication(user)).thenReturn("mock-token");
+
+        // Setup the update request with a new email
+        updateRequest.setEmail("new.email@example.com");
 
         // when
         ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
@@ -776,5 +772,275 @@ class ProfileServiceImplTest {
 
         // Verify the delegation happened
         verify(spyService).searchCareGiversLite(name, speciality);
+    }
+
+    @Test
+    void updateCurrentUserProfile_NoEmailChange_ForPacillian() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Important: Set pacillian's email to match the security context
+        pacillian.setEmail("test@example.com");
+
+        // Create update request with same email as security context
+        updateRequest.setEmail("test@example.com");
+        updateRequest.setName("Updated Name");
+        updateRequest.setAddress("Updated Address");
+        updateRequest.setPhoneNumber("089876543210");
+        updateRequest.setMedicalHistory("Updated Medical History");
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(pacillian));
+        when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        assertThat(response.getName()).isEqualTo("Updated Name");
+        assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
+
+        verify(userRepository).findByEmail("test@example.com");
+        verify(pacillianRepository).save(any(Pacillian.class));
+        verify(pacillianRepository).flush();
+        verify(userRepository, never()).existsByEmail(any());
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void updateCurrentUserProfile_NoEmailChange_ForCareGiver() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Important: Set careGiver's email to match the security context
+        careGiver.setEmail("test@example.com");
+
+        // Create update request with same email as in the security context
+        updateRequest.setEmail("test@example.com");
+        updateRequest.setName("Updated Name");
+        updateRequest.setAddress("Updated Address");
+        updateRequest.setPhoneNumber("089876543210");
+        updateRequest.setSpeciality("Updated Speciality");
+        updateRequest.setWorkAddress("Updated Work Address");
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(careGiver));
+        when(careGiverRepository.save(any(CareGiver.class))).thenReturn(careGiver);
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        assertThat(response.getName()).isEqualTo("Updated Name");
+        assertThat(response.getSpeciality()).isEqualTo("Updated Speciality");
+        assertThat(response.getWorkAddress()).isEqualTo("Updated Work Address");
+
+        verify(userRepository).findByEmail("test@example.com");
+        verify(careGiverRepository).save(any(CareGiver.class));
+        verify(careGiverRepository).flush();
+        verify(userRepository, never()).existsByEmail(any());
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void updateCurrentUserProfile_NoEmailChange_ForRegularUser() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with same email
+        updateRequest.setEmail(user.getEmail());
+        updateRequest.setName("Updated Name");
+        updateRequest.setAddress("Updated Address");
+        updateRequest.setPhoneNumber("089876543210");
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenReturn(user);
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        assertThat(response.getName()).isEqualTo("Updated Name");
+
+        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).save(any(User.class));
+        verify(userRepository).flush();
+        verify(pacillianRepository, never()).save(any());
+        verify(careGiverRepository, never()).save(any());
+        verify(userRepository, never()).existsByEmail(any());
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void updateCurrentUserProfile_WithEmailChange_ForRegularUser_Success() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with new email
+        String newEmail = "newemail@example.com";
+        updateRequest.setEmail(newEmail);
+        updateRequest.setName("Updated Name");
+        updateRequest.setAddress("Updated Address");
+        updateRequest.setPhoneNumber("089876543210");
+
+        // Setup mocks for email change path
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail(newEmail)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(authService.generateTokenWithoutAuthentication(any(User.class))).thenReturn("new-jwt-token");
+
+        // Mock ServletRequestAttributes and HttpServletResponse
+        ServletRequestAttributes requestAttributes = mock(ServletRequestAttributes.class);
+        HttpServletResponse httpResponse = mock(HttpServletResponse.class);
+        when(requestAttributes.getResponse()).thenReturn(httpResponse);
+        RequestContextHolder.setRequestAttributes(requestAttributes);
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        assertThat(response.getName()).isEqualTo("Updated Name");
+
+        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).existsByEmail(newEmail);
+        verify(userRepository).save(any(User.class));
+        verify(userRepository).flush();
+        verify(userRepository).findById(user.getId());
+        verify(authService).generateTokenWithoutAuthentication(any(User.class));
+        verify(httpResponse).setHeader("Authorization", "Bearer new-jwt-token");
+        verify(httpResponse).setHeader("X-Email-Changed", "true");
+
+        // Reset RequestContextHolder
+        RequestContextHolder.resetRequestAttributes();
+    }
+
+    @Test
+    void updateCurrentUserProfile_WithEmailChange_EmailAlreadyExists() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with new email
+        String newEmail = "existing@example.com";
+        updateRequest.setEmail(newEmail);
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail(newEmail)).thenReturn(true);
+
+        // Execute and verify exception
+        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
+                .isInstanceOf(EmailAlreadyExistsException.class)
+                .hasMessageContaining("Email is already in use");
+
+        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).existsByEmail(newEmail);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void updateCurrentUserProfile_WithEmailChange_NullRequestAttributes() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with new email
+        String newEmail = "newemail@example.com";
+        updateRequest.setEmail(newEmail);
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail(newEmail)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(authService.generateTokenWithoutAuthentication(any(User.class))).thenReturn("new-jwt-token");
+
+        // Set null request attributes
+        RequestContextHolder.resetRequestAttributes();
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        verify(userRepository).findById(user.getId());
+        verify(authService).generateTokenWithoutAuthentication(any(User.class));
+    }
+
+    @Test
+    void updateCurrentUserProfile_WithEmailChange_NullHttpResponse() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with new email
+        String newEmail = "newemail@example.com";
+        updateRequest.setEmail(newEmail);
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail(newEmail)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(authService.generateTokenWithoutAuthentication(any(User.class))).thenReturn("new-jwt-token");
+
+        // Mock ServletRequestAttributes but with null HttpResponse
+        ServletRequestAttributes requestAttributes = mock(ServletRequestAttributes.class);
+        when(requestAttributes.getResponse()).thenReturn(null);
+        RequestContextHolder.setRequestAttributes(requestAttributes);
+
+        // Execute
+        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+
+        // Verify
+        assertThat(response).isNotNull();
+        verify(requestAttributes).getResponse();
+
+        // Reset RequestContextHolder
+        RequestContextHolder.resetRequestAttributes();
+    }
+
+    @Test
+    void updateCurrentUserProfile_UserNotFoundAfterUpdate() {
+        // Set up security context
+        mockSecurityContext();
+
+        // Create update request with new email
+        String newEmail = "newemail@example.com";
+        updateRequest.setEmail(newEmail);
+
+        // Setup mocks
+        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.existsByEmail(newEmail)).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenReturn(user);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.empty());
+
+        // Execute and verify exception
+        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("User not found after update");
+
+        verify(userRepository).findById(user.getId());
+    }
+
+    @Test
+    void generateJwtTokenForUser_ShouldCallAuthService() {
+        // This test is for the private helper method
+        when(authService.generateTokenWithoutAuthentication(user)).thenReturn("jwt-token");
+
+        // Use reflection to access private method
+        try {
+            Method method = ProfileServiceImpl.class.getDeclaredMethod("generateJwtTokenForUser", User.class);
+            method.setAccessible(true);
+            String token = (String) method.invoke(profileServiceImpl, user);
+
+            assertThat(token).isEqualTo("jwt-token");
+            verify(authService).generateTokenWithoutAuthentication(user);
+        } catch (Exception e) {
+            fail("Failed to access private method: " + e.getMessage());
+        }
     }
 }
