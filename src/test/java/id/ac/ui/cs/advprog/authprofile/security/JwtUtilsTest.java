@@ -152,4 +152,25 @@ public class JwtUtilsTest {
         // Additional verification: the method should return false for other invalid tokens too
         assertFalse(jwtUtils.validateJwtToken("completely.invalid.token"));
     }
+
+    @Test
+    public void testGenerateJwtTokenFromUsername() {
+        // Arrange
+        String username = "test@example.com";
+
+        // Act
+        String token = jwtUtils.generateJwtTokenFromUsername(username);
+
+        // Assert
+        assertNotNull(token);
+        assertFalse(token.isEmpty());
+
+        // Verify the token contains the expected username
+        String extractedUsername = jwtUtils.getUserNameFromJwtToken(token);
+        assertEquals(username, extractedUsername);
+
+        // Verify the token is valid
+        boolean isValid = jwtUtils.validateJwtToken(token);
+        assertTrue(isValid);
+    }
 }
