@@ -5,6 +5,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.response.MessageResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.security.annotation.RequiresAuthorization;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -14,7 +15,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -37,8 +40,31 @@ public class ProfileController {
 
     @PutMapping("/profile")
     @RequiresAuthorization(action = "UPDATE_PROFILE", resourceIdExpression = "null")
-    public ResponseEntity<ProfileResponse> updateCurrentUserProfile(@Valid @RequestBody UpdateProfileRequest updateRequest) {
+    public ResponseEntity<?> updateCurrentUserProfile(
+            @Valid @RequestBody UpdateProfileRequest updateRequest,
+            HttpServletResponse response) {
+
         ProfileResponse updatedProfile = profileService.updateCurrentUserProfile(updateRequest);
+
+        // Check if a new token was generated due to email change
+        String newToken = response.getHeader("Authorization");
+        String emailChanged = response.getHeader("X-Email-Changed");
+
+        if (emailChanged != null && emailChanged.equals("true")) {
+            // Return both the profile and token information
+            Map<String, Object> result = new HashMap<>();
+            result.put("profile", updatedProfile);
+            result.put("message", "Profile updated successfully. Your email has been changed, please use the new token for future requests.");
+            result.put("tokenUpdated", true);
+
+            if (newToken != null && newToken.startsWith("Bearer ")) {
+                result.put("token", newToken.substring(7));
+            }
+
+            return ResponseEntity.ok(result);
+        }
+
+        // If no email change, just return the updated profile
         return ResponseEntity.ok(updatedProfile);
     }
 
