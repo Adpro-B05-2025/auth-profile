@@ -3,6 +3,8 @@ package id.ac.ui.cs.advprog.authprofile.service;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 
 public interface IProfileService {
@@ -45,4 +47,36 @@ public interface IProfileService {
      * Delete the current user's account
      */
     void deleteCurrentUserAccount();
+
+
+    /**
+     * Get all CareGivers with only essential information for listing
+     * @return list of all care givers with minimal information
+     */
+    List<ProfileResponse> getAllCareGiversLite();
+
+    /**
+     * Search CareGivers by name and speciality with only essential information
+     * @param name the name to search for (optional)
+     * @param speciality the speciality to search for (optional)
+     * @return list of matching care givers with minimal information
+     */
+    List<ProfileResponse> searchCareGiversLite(String name, String speciality);
+
+    /**
+     * Get a specific caregiver's profile by ID with sensitive information hidden
+     * @param caregiverId the caregiver ID
+     * @return the lite profile response with sensitive fields hidden
+     */
+    ProfileResponse getCareGiverProfileLite(Long caregiverId);
+
+    /**
+     * Search CareGivers by name, speciality, and/or working schedule
+     * @param name the name to search for (optional)
+     * @param speciality the speciality to search for (optional)
+     * @param dayOfWeek the day of week to check availability (optional)
+     * @param time the time to check availability (optional)
+     * @return list of matching care givers with minimal information
+     */
+    List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time);
 }

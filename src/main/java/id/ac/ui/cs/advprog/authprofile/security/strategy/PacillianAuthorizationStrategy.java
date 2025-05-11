@@ -32,7 +32,7 @@ public class PacillianAuthorizationStrategy implements AuthorizationStrategy {
             case "VIEW_PROFILE":
                 // Pacillians can view their own profile or any caregiver profile
                 return userRepository.findById(resourceId)
-                        .map(targetUser -> targetUser instanceof CareGiver || user.getId().equals(resourceId))
+                        .map(targetUser -> user.getId().equals(resourceId))
                         .orElse(false);
             case "UPDATE_PROFILE":
             case "DELETE_PROFILE":

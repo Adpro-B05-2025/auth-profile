@@ -17,7 +17,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
-import id.ac.ui.cs.advprog.authprofile.service.impl.AuthServiceImpl;
+import id.ac.ui.cs.advprog.authprofile.service.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -407,5 +407,52 @@ class AuthServiceImplTest {
 
         // Response should be invalid
         assertThat(response.isValid()).isFalse();
+    }
+
+    @Test
+    void regenerateToken_ShouldReturnJwtResponse() {
+        // given
+        String mockToken = "regenerated_jwt_token";
+
+        // Setup user with proper roles
+        Set<Role> roles = new HashSet<>();
+        roles.add(pacillianRole);
+        user.setRoles(roles);
+
+        // Setup JWT utils mock behavior
+        when(jwtUtils.generateJwtTokenFromUsername(user.getEmail())).thenReturn(mockToken);
+
+        // when
+        JwtResponse response = authServiceImpl.regenerateToken(user);
+
+        // then
+        assertThat(response).isNotNull();
+        assertThat(response.getToken()).isEqualTo(mockToken);
+        assertThat(response.getId()).isEqualTo(user.getId());
+        assertThat(response.getEmail()).isEqualTo(user.getEmail());
+        assertThat(response.getName()).isEqualTo(user.getName());
+        assertThat(response.getRoles()).containsExactly("ROLE_PACILLIAN");
+
+        // Verify the JWT was generated with the user's email
+        verify(jwtUtils).generateJwtTokenFromUsername(user.getEmail());
+    }
+
+    @Test
+    void generateTokenWithoutAuthentication_ShouldReturnToken() {
+        // given
+        String mockToken = "direct_jwt_token";
+
+        // Setup JWT utils mock behavior
+        when(jwtUtils.generateJwtTokenFromUsername(user.getEmail())).thenReturn(mockToken);
+
+        // when
+        String resultToken = authServiceImpl.generateTokenWithoutAuthentication(user);
+
+        // then
+        assertThat(resultToken).isNotNull();
+        assertThat(resultToken).isEqualTo(mockToken);
+
+        // Verify the JWT was generated with the user's email
+        verify(jwtUtils).generateJwtTokenFromUsername(user.getEmail());
     }
 }
