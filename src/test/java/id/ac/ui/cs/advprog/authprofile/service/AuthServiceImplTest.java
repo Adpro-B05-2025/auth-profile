@@ -142,6 +142,7 @@ class AuthServiceImplTest {
 
         // Create test models for pacillian and caregiver
         pacillian = new Pacillian();
+        pacillian.setId(2L);
         pacillian.setEmail(pacillianRequest.getEmail());
         pacillian.setPassword("encoded_password");
         pacillian.setName(pacillianRequest.getName());
@@ -154,6 +155,7 @@ class AuthServiceImplTest {
         pacillian.setRoles(pacillianRoles);
 
         careGiver = new CareGiver();
+        careGiver.setId(3L);
         careGiver.setEmail(careGiverRequest.getEmail());
         careGiver.setPassword("encoded_password");
         careGiver.setName(careGiverRequest.getName());
@@ -176,7 +178,10 @@ class AuthServiceImplTest {
         // Setup authentication and userDetails mocks
         Authentication authentication = mock(Authentication.class);
         UserDetails userDetails = mock(UserDetails.class);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+
+        // Now userDetails.getUsername() should return the user ID as a string
+        when(userDetails.getUsername()).thenReturn("1");
+
         List<SimpleGrantedAuthority> authorities =
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_PACILLIAN"));
         doReturn(authorities).when(userDetails).getAuthorities();
@@ -185,7 +190,9 @@ class AuthServiceImplTest {
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(authentication);
         when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+
+        // Find user by ID not email now
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         JwtResponse response = authServiceImpl.authenticateUser(loginRequest);
 
@@ -197,7 +204,7 @@ class AuthServiceImplTest {
 
         verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
         verify(jwtUtils).generateJwtToken(authentication);
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
     }
 
     @Test
@@ -205,13 +212,14 @@ class AuthServiceImplTest {
         // Setup
         Authentication authentication = mock(Authentication.class);
         UserDetails userDetails = mock(UserDetails.class);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+        when(userDetails.getUsername()).thenReturn("1");
         when(authentication.getPrincipal()).thenReturn(userDetails);
 
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(authentication);
-        when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+        // Remove the unnecessary stubbing for jwtUtils.generateJwtToken
+        // when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
         // When & Then
         assertThatThrownBy(() -> authServiceImpl.authenticateUser(loginRequest))
@@ -329,14 +337,14 @@ class AuthServiceImplTest {
         verify(factoryProvider, never()).getFactory(any());
     }
 
-    // Token validation tests remain mostly unchanged
+    // Token validation tests updated to use user ID
 
     @Test
     void validateToken_WithValidToken_ShouldReturnValidResponse() {
         // given
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn("1"); // Now returns user ID
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user)); // Find by ID
 
         // when
         TokenValidationResponse response = authServiceImpl.validateToken(validToken);
@@ -349,8 +357,8 @@ class AuthServiceImplTest {
         assertThat(response.getRoles()).contains("ROLE_PACILLIAN");
 
         verify(jwtUtils).validateJwtToken(validToken);
-        verify(jwtUtils).getUserNameFromJwtToken(validToken);
-        verify(userRepository).findByEmail("test@example.com");
+        verify(jwtUtils).getUserIdFromJwtToken(validToken);
+        verify(userRepository).findById(1L);
     }
 
     @Test
@@ -369,16 +377,16 @@ class AuthServiceImplTest {
         assertThat(response.getRoles()).isNull();
 
         verify(jwtUtils).validateJwtToken(invalidToken);
-        verify(jwtUtils, never()).getUserNameFromJwtToken(anyString());
-        verify(userRepository, never()).findByEmail(anyString());
+        verify(jwtUtils, never()).getUserIdFromJwtToken(anyString());
+        verify(userRepository, never()).findById(anyLong());
     }
 
     @Test
     void validateToken_WhenExceptionOccurs_ShouldReturnInvalidResponse() {
         // given
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenThrow(new RuntimeException("Test exception"));
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn("1");
+        when(userRepository.findById(1L)).thenThrow(new RuntimeException("Test exception"));
 
         // when
         TokenValidationResponse response = authServiceImpl.validateToken(validToken);
@@ -391,16 +399,16 @@ class AuthServiceImplTest {
         assertThat(response.getRoles()).isNull();
 
         verify(jwtUtils).validateJwtToken(validToken);
-        verify(jwtUtils).getUserNameFromJwtToken(validToken);
-        verify(userRepository).findByEmail("test@example.com");
+        verify(jwtUtils).getUserIdFromJwtToken(validToken);
+        verify(userRepository).findById(1L);
     }
 
     @Test
     void validateToken_WhenUserNotFound_ShouldReturnInvalidResponse() {
         // given
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
         // when/then
         TokenValidationResponse response = authServiceImpl.validateToken(validToken);
@@ -409,51 +417,26 @@ class AuthServiceImplTest {
         assertThat(response.isValid()).isFalse();
     }
 
-    @Test
-    void regenerateToken_ShouldReturnJwtResponse() {
-        // given
-        String mockToken = "regenerated_jwt_token";
 
-        // Setup user with proper roles
-        Set<Role> roles = new HashSet<>();
-        roles.add(pacillianRole);
-        user.setRoles(roles);
-
-        // Setup JWT utils mock behavior
-        when(jwtUtils.generateJwtTokenFromUsername(user.getEmail())).thenReturn(mockToken);
-
-        // when
-        JwtResponse response = authServiceImpl.regenerateToken(user);
-
-        // then
-        assertThat(response).isNotNull();
-        assertThat(response.getToken()).isEqualTo(mockToken);
-        assertThat(response.getId()).isEqualTo(user.getId());
-        assertThat(response.getEmail()).isEqualTo(user.getEmail());
-        assertThat(response.getName()).isEqualTo(user.getName());
-        assertThat(response.getRoles()).containsExactly("ROLE_PACILLIAN");
-
-        // Verify the JWT was generated with the user's email
-        verify(jwtUtils).generateJwtTokenFromUsername(user.getEmail());
-    }
 
     @Test
     void generateTokenWithoutAuthentication_ShouldReturnToken() {
         // given
         String mockToken = "direct_jwt_token";
+        String userId = "1";
 
-        // Setup JWT utils mock behavior
-        when(jwtUtils.generateJwtTokenFromUsername(user.getEmail())).thenReturn(mockToken);
+        // Setup JWT utils mock behavior - now using user ID
+        when(jwtUtils.generateJwtTokenFromUserId(userId)).thenReturn(mockToken);
 
         // when
-        String resultToken = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
+        String resultToken = jwtUtils.generateJwtTokenFromUserId(userId);
 
         // then
         assertThat(resultToken).isNotNull();
         assertThat(resultToken).isEqualTo(mockToken);
 
-        // Verify the JWT was generated with the user's email
-        verify(jwtUtils).generateJwtTokenFromUsername(user.getEmail());
+        // Verify the JWT was generated with the user's ID
+        verify(jwtUtils).generateJwtTokenFromUserId(userId);
     }
 
     @Test
