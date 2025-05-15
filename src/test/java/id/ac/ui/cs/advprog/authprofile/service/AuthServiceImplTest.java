@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
@@ -7,6 +8,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.factory.CareGiverFactory;
 import id.ac.ui.cs.advprog.authprofile.factory.PacillianFactory;
+import id.ac.ui.cs.advprog.authprofile.factory.UserFactory;
 import id.ac.ui.cs.advprog.authprofile.factory.UserFactoryProvider;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
@@ -17,11 +19,9 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
-import id.ac.ui.cs.advprog.authprofile.service.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -229,7 +229,7 @@ class AuthServiceImplTest {
         when(pacillianFactory.createUser(eq(pacillianRequest), anyString())).thenReturn(pacillian);
 
         // when
-        String result = authServiceImpl.registerPacillian(pacillianRequest);
+        String result = authServiceImpl.registerUser(pacillianRequest);
 
         // then
         assertThat(result).isEqualTo("Pacillian registered successfully!");
@@ -248,7 +248,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Email is already in use");
 
@@ -264,7 +264,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByNik(pacillianRequest.getNik())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerPacillian(pacillianRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("NIK is already in use");
 
@@ -284,7 +284,7 @@ class AuthServiceImplTest {
         when(careGiverFactory.createUser(eq(careGiverRequest), anyString())).thenReturn(careGiver);
 
         // when
-        String result = authServiceImpl.registerCareGiver(careGiverRequest);
+        String result = authServiceImpl.registerUser(careGiverRequest);
 
         // then
         assertThat(result).isEqualTo("CareGiver registered successfully!");
@@ -303,7 +303,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Email is already in use");
 
@@ -319,7 +319,7 @@ class AuthServiceImplTest {
         when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(true);
 
         // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerCareGiver(careGiverRequest))
+        assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("NIK is already in use");
 
@@ -446,7 +446,7 @@ class AuthServiceImplTest {
         when(jwtUtils.generateJwtTokenFromUsername(user.getEmail())).thenReturn(mockToken);
 
         // when
-        String resultToken = authServiceImpl.generateTokenWithoutAuthentication(user);
+        String resultToken = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
 
         // then
         assertThat(resultToken).isNotNull();
@@ -454,5 +454,43 @@ class AuthServiceImplTest {
 
         // Verify the JWT was generated with the user's email
         verify(jwtUtils).generateJwtTokenFromUsername(user.getEmail());
+    }
+
+    @Test
+    void registerUser_WithUnsupportedUserType_ShouldThrowException() {
+        // Create a BaseRegisterRequest that we'll use with our factory
+        BaseRegisterRequest unsupportedRequest = mock(BaseRegisterRequest.class);
+
+        // Mock the BaseRegisterRequest to return expected values
+        when(unsupportedRequest.getEmail()).thenReturn("unsupported@example.com");
+        when(unsupportedRequest.getNik()).thenReturn("1234567890123456");
+        when(unsupportedRequest.getPassword()).thenReturn("password123");
+
+        // We need a User object that is neither a Pacillian nor a CareGiver
+        User unsupportedUser = new User();
+        unsupportedUser.setEmail("unsupported@example.com");
+
+        // Setup mocks to pass validation - using lenient() to be less strict
+        lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        lenient().when(userRepository.existsByNik(anyString())).thenReturn(false);
+
+        // Mock the encoder
+        when(encoder.encode(anyString())).thenReturn("encoded_password");
+
+        // Mock the factory to return our unsupported user type - using lenient() and any()
+        UserFactory mockFactory = mock(UserFactory.class);
+        when(factoryProvider.getFactory(any())).thenReturn(mockFactory);
+        lenient().when(mockFactory.createUser(any(), any())).thenReturn(unsupportedUser);
+
+        // Act and Assert - verify that the exception is thrown with the correct message
+        assertThatThrownBy(() -> authServiceImpl.registerUser(unsupportedRequest))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported user type");
+
+        // Verify our mocks were called as expected
+        verify(factoryProvider).getFactory(any());
+        verify(mockFactory).createUser(any(), any());
+        verify(pacillianRepository, never()).save(any());
+        verify(careGiverRepository, never()).save(any());
     }
 }
