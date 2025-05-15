@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.controller;
 
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
@@ -31,15 +32,9 @@ public class AuthController {
         return ResponseEntity.ok(jwtResponse);
     }
 
-    @PostMapping("/register/pacillian")
-    public ResponseEntity<MessageResponse> registerPacillian(@Valid @RequestBody RegisterPacillianRequest registerRequest) {
-        String message = authService.registerPacillian(registerRequest);
-        return ResponseEntity.ok(new MessageResponse(message));
-    }
-
-    @PostMapping("/register/caregiver")
-    public ResponseEntity<MessageResponse> registerCareGiver(@Valid @RequestBody RegisterCareGiverRequest registerRequest) {
-        String message = authService.registerCareGiver(registerRequest);
+    @PostMapping("/register")
+    public ResponseEntity<MessageResponse> registerUser(@Valid @RequestBody BaseRegisterRequest registerRequest) {
+        String message = authService.registerUser(registerRequest);
         return ResponseEntity.ok(new MessageResponse(message));
     }
 
