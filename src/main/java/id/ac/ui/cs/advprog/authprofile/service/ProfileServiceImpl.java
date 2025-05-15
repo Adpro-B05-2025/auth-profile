@@ -1,7 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
-import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
@@ -10,7 +9,7 @@ import id.ac.ui.cs.advprog.authprofile.model.User;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
-import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,23 +27,23 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-public class ProfileServiceImpl implements IProfileService {
+public class  ProfileServiceImpl implements IProfileService {
 
     private final UserRepository userRepository;
     private final PacillianRepository pacillianRepository;
     private final CareGiverRepository careGiverRepository;
-    private final IAuthService authService;
+    private final JwtUtils jwtUtils;
 
     @Autowired
     public ProfileServiceImpl(
             UserRepository userRepository,
             PacillianRepository pacillianRepository,
             CareGiverRepository careGiverRepository,
-            IAuthService authService) {
+            JwtUtils jwtUtils) {
         this.userRepository = userRepository;
         this.pacillianRepository = pacillianRepository;
         this.careGiverRepository = careGiverRepository;
-        this.authService = authService;
+        this.jwtUtils = jwtUtils;
     }
 
     /**
@@ -158,7 +157,7 @@ public class ProfileServiceImpl implements IProfileService {
                     .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
 
             // Use a direct approach to generate a token instead of going through authentication
-            String jwt = generateJwtTokenForUser(user);
+            String jwt = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
 
             // Get the current HTTP response to add the new token as a header
             ServletRequestAttributes requestAttributes =
@@ -175,14 +174,6 @@ public class ProfileServiceImpl implements IProfileService {
         return ProfileResponse.fromUser(user);
     }
 
-    /**
-     * Helper method to generate a JWT token for a user without authentication
-     */
-    private String generateJwtTokenForUser(User user) {
-        // This method directly uses JwtUtils to create a token - you need to add this method to JwtUtils
-        // Alternatively, inject JwtUtils into this class and call it directly
-        return authService.generateTokenWithoutAuthentication(user);
-    }
 
     /**
      * Delete the current user's account
@@ -213,7 +204,7 @@ public class ProfileServiceImpl implements IProfileService {
     public List<ProfileResponse> getAllCareGiversLite() {
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
-                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .map(this::createLiteProfileResponse)
                 .collect(Collectors.toList());
     }
 
@@ -232,7 +223,7 @@ public class ProfileServiceImpl implements IProfileService {
         }
 
         return careGivers.stream()
-                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .map(this::createLiteProfileResponse)
                 .collect(Collectors.toList());
     }
 
@@ -311,7 +302,7 @@ public class ProfileServiceImpl implements IProfileService {
         }
 
         return careGivers.stream()
-                .map(careGiver -> createLiteProfileResponse(careGiver))
+                .map(this::createLiteProfileResponse)
                 .collect(Collectors.toList());
     }
 
