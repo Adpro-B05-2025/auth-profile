@@ -26,12 +26,7 @@ public interface IAuthService {
      */
     TokenValidationResponse validateToken(String token);
 
-    /**
-     * Regenerates a JWT token for a user after a profile update (like email change)
-     * @param user the updated user
-     * @return JWT response containing the new token and user details
-     */
-    JwtResponse regenerateToken(User user);
+
 
     String registerUser(BaseRegisterRequest registerRequest);
 

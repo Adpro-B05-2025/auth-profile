@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +47,7 @@ public class AuthTokenFilterTest {
     private AuthTokenFilter authTokenFilter;
 
     private final String validToken = "valid.jwt.token";
-    private final String validEmail = "test@example.com";
+    private final String validUserId = "123";
 
     @BeforeEach
     void setUp() {
@@ -60,21 +60,21 @@ public class AuthTokenFilterTest {
         // Arrange
         when(request.getHeader("Authorization")).thenReturn("Bearer " + validToken);
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn(validEmail);
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn(validUserId);
 
         UserDetails userDetails = new User(
-                validEmail,
+                validUserId, // Using user ID instead of email
                 "password",
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_PACILLIAN"))
         );
-        when(userDetailsService.loadUserByUsername(validEmail)).thenReturn(userDetails);
+        when(userDetailsService.loadUserById(Long.parseLong(validUserId))).thenReturn(userDetails);
 
         // Act
         authTokenFilter.doFilterInternal(request, response, filterChain);
 
         // Assert
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
-        assertEquals(validEmail, SecurityContextHolder.getContext().getAuthentication().getName());
+        assertEquals(validUserId, SecurityContextHolder.getContext().getAuthentication().getName());
         verify(filterChain).doFilter(request, response);
     }
 
@@ -119,7 +119,7 @@ public class AuthTokenFilterTest {
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         verify(filterChain).doFilter(request, response);
         verify(jwtUtils).validateJwtToken(validToken);
-        verify(jwtUtils, never()).getUserNameFromJwtToken(anyString());
+        verify(jwtUtils, never()).getUserIdFromJwtToken(anyString());
     }
 
     @Test
@@ -127,8 +127,8 @@ public class AuthTokenFilterTest {
         // Arrange
         when(request.getHeader("Authorization")).thenReturn("Bearer " + validToken);
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserNameFromJwtToken(validToken)).thenReturn(validEmail);
-        when(userDetailsService.loadUserByUsername(validEmail)).thenThrow(new RuntimeException("Test exception"));
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn(validUserId);
+        when(userDetailsService.loadUserById(Long.parseLong(validUserId))).thenThrow(new RuntimeException("Test exception"));
 
         // Act
         authTokenFilter.doFilterInternal(request, response, filterChain);

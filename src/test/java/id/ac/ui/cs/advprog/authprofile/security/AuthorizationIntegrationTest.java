@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -86,9 +87,15 @@ public class AuthorizationIntegrationTest {
         otherProfile = new ProfileResponse();
         otherProfile.setId(2L);
 
-        // Set up common stubs - now using lenient mode for all tests
+        // Set up common stubs - now using ID-based lookups
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        // Ensure we mock non-existent IDs for testing
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // Keep email-based lookups for backward compatibility/testing
         when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(testUser));
         when(userRepository.findByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
+
         when(profileService.getCurrentUserProfile()).thenReturn(profileResponse);
         when(profileService.getUserProfile(2L)).thenReturn(otherProfile);
     }
@@ -100,9 +107,9 @@ public class AuthorizationIntegrationTest {
 
     @Test
     void whenUserAuthorized_thenSucceed() {
-        // Set up authentication - use proper UserDetails object
+        // Set up authentication - use user ID as username instead of email
         UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("test@example.com")
+                .withUsername("1") // User ID instead of email
                 .password("password")
                 .authorities("ROLE_PACILLIAN")
                 .build();
@@ -122,9 +129,9 @@ public class AuthorizationIntegrationTest {
 
     @Test
     void whenUserNotAuthorized_thenThrowUnauthorizedException() {
-        // Set up authentication - use proper UserDetails object
+        // Set up authentication with user ID instead of email
         UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("test@example.com")
+                .withUsername("1") // User ID instead of email
                 .password("password")
                 .authorities("ROLE_PACILLIAN")
                 .build();
@@ -145,9 +152,9 @@ public class AuthorizationIntegrationTest {
 
     @Test
     void whenUserNotFound_thenThrowUnauthorizedException() {
-        // Set up authentication with non-existent user
+        // Set up authentication with non-existent user ID
         UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("nonexistent@example.com")
+                .withUsername("999") // Non-existent user ID
                 .password("password")
                 .authorities("ROLE_PACILLIAN")
                 .build();
@@ -165,9 +172,9 @@ public class AuthorizationIntegrationTest {
 
     @Test
     void getSpecificUserProfile_whenAuthorized() {
-        // Set up authentication
+        // Set up authentication with user ID
         UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("test@example.com")
+                .withUsername("1") // User ID instead of email
                 .password("password")
                 .authorities("ROLE_PACILLIAN")
                 .build();
@@ -187,9 +194,9 @@ public class AuthorizationIntegrationTest {
 
     @Test
     void getSpecificUserProfile_whenNotAuthorized() {
-        // Set up authentication
+        // Set up authentication with user ID
         UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("test@example.com")
+                .withUsername("1") // User ID instead of email
                 .password("password")
                 .authorities("ROLE_PACILLIAN")
                 .build();

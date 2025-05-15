@@ -14,6 +14,7 @@ import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -159,14 +160,34 @@ class ProfileServiceImplTest {
         updateRequest.setMedicalHistory("Updated medical history");
         updateRequest.setSpeciality("Updated speciality");
         updateRequest.setWorkAddress("Updated work address");
+
+        SecurityContextHolder.clearContext();
+
     }
 
-    // Helper method to set up security context
+    @AfterEach
+    void tearDown() {
+        // Always clean up the security context after each test
+        SecurityContextHolder.clearContext();
+    }
+
     private void mockSecurityContext() {
-        when(securityContext.getAuthentication()).thenReturn(authentication);
+        // Create a clean security context
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+
+        // Configure authentication with lenient stubbings
+        // This avoids UnnecessaryStubbingException when not all of these are used in every test
+        lenient().when(authentication.isAuthenticated()).thenReturn(true);
+        lenient().when(authentication.getPrincipal()).thenReturn(userDetails);
+        lenient().when(userDetails.getUsername()).thenReturn(user.getId().toString());
+
+        // Set the authentication in the context
+        securityContext.setAuthentication(authentication);
         SecurityContextHolder.setContext(securityContext);
-        when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+    }
+
+    private void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -174,8 +195,8 @@ class ProfileServiceImplTest {
         // Set up security context for this specific test
         mockSecurityContext();
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // given - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         // when
         ProfileResponse response = profileServiceImpl.getCurrentUserProfile();
@@ -185,7 +206,7 @@ class ProfileServiceImplTest {
         assertThat(response.getEmail()).isEqualTo("test@example.com");
         assertThat(response.getName()).isEqualTo("Test User");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
     }
 
     @Test
@@ -193,33 +214,17 @@ class ProfileServiceImplTest {
         // Set up security context for this specific test
         mockSecurityContext();
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+        // given - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
         // when/then
         assertThatThrownBy(() -> profileServiceImpl.getCurrentUserProfile())
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
     }
 
-    @Test
-    void getCurrentUserEmail_WithStringPrincipal_ShouldReturnEmail() {
-        // Set up SecurityContext with a string principal instead of UserDetails
-        when(securityContext.getAuthentication()).thenReturn(authentication);
-        SecurityContextHolder.setContext(securityContext);
-        when(authentication.getPrincipal()).thenReturn("test@example.com");
-
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
-
-        // Call a method that uses getCurrentUserEmail internally
-        ProfileResponse response = profileServiceImpl.getCurrentUserProfile();
-
-        // Verify the response is correct
-        assertThat(response).isNotNull();
-        assertThat(response.getEmail()).isEqualTo("test@example.com");
-    }
 
     @Test
     void getUserProfile_ShouldReturnProfileResponse() {
@@ -333,41 +338,41 @@ class ProfileServiceImplTest {
 
     @Test
     void updateCurrentUserProfile_ForPacillian_ShouldReturnUpdatedProfile() {
-        // Set up security context for this specific test
+        // Set up security context
         mockSecurityContext();
 
-        // Important: Set pacillian's email to match the security context
+        // Set up pacillian
+        pacillian.setId(1L);
         pacillian.setEmail("test@example.com");
 
-        // Make sure our request uses the same email
+        // Set up request
         updateRequest.setEmail("test@example.com");
         updateRequest.setName("Updated Name");
         updateRequest.setAddress("Updated Address");
         updateRequest.setPhoneNumber("089876543210");
         updateRequest.setMedicalHistory("Updated Medical History");
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(pacillian));
+        // Set up mocks
+        when(userRepository.findById(1L)).thenReturn(Optional.of(pacillian));
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
 
-        // when
+        // Execute method
         ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // then
+        // Verify response
         assertThat(response).isNotNull();
         assertThat(response.getName()).isEqualTo("Updated Name");
         assertThat(response.getAddress()).isEqualTo("Updated Address");
         assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
         assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
 
-        // Verify that the correct methods were called
-        verify(userRepository).findByEmail("test@example.com");
+        // Verify calls
+        verify(userRepository, times(1)).findById(1L);
         verify(pacillianRepository).save(any(Pacillian.class));
         verify(pacillianRepository).flush();
 
-        // Since we're not changing the email, these shouldn't be called
+        // Since we're not changing the email, this shouldn't be called
         verify(userRepository, never()).existsByEmail(any());
-        verify(userRepository, never()).findById(any());
     }
 
     @Test
@@ -376,13 +381,12 @@ class ProfileServiceImplTest {
         mockSecurityContext();
 
         // given - a regular User that is neither Pacillian nor CareGiver
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Return the user for both calls to findById
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user))
+                .thenReturn(Optional.of(user));
+
+        when(userRepository.existsByEmail("new.email@example.com")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
-
-        // THIS LINE IS MISSING - Need to mock the findById method too
-        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
-
-
 
         // Setup the update request with a new email
         updateRequest.setEmail("new.email@example.com");
@@ -396,7 +400,9 @@ class ProfileServiceImplTest {
         assertThat(response.getAddress()).isEqualTo("Updated Address");
         assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
 
-        verify(userRepository).findByEmail("test@example.com");
+        // Verify findById was called twice (since we're changing email)
+        verify(userRepository, times(2)).findById(1L);
+        verify(userRepository).existsByEmail("new.email@example.com");
         verify(userRepository).save(any(User.class));
         verify(pacillianRepository, never()).save(any(Pacillian.class));
         verify(careGiverRepository, never()).save(any(CareGiver.class));
@@ -404,34 +410,34 @@ class ProfileServiceImplTest {
 
     @Test
     void deleteCurrentUserAccount_ShouldDeleteUser() {
-        // Set up security context for this specific test
+        // Set up security context
         mockSecurityContext();
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Set up repository mock for ID-based lookup
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        // when
+        // Execute the method
         profileServiceImpl.deleteCurrentUserAccount();
 
-        // then
-        verify(userRepository).findByEmail("test@example.com");
+        // Verify the repository calls - now using findById
+        verify(userRepository).findById(1L);
         verify(userRepository).delete(user);
     }
 
     @Test
     void deleteCurrentUserAccount_WithNonExistentUser_ShouldThrowException() {
-        // Set up security context for this specific test
+        // Set up security context
         mockSecurityContext();
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+        // Set up repository mock for ID-based lookup
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // when/then
+        // Execute and verify exception
         assertThatThrownBy(() -> profileServiceImpl.deleteCurrentUserAccount())
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         verify(userRepository, never()).delete(any(User.class));
     }
 
@@ -440,15 +446,15 @@ class ProfileServiceImplTest {
         // Set up security context for this specific test
         mockSecurityContext();
 
-        // given
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.empty());
+        // given - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
         // when/then
         assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         // Verify that no save methods are called
         verify(userRepository, never()).save(any(User.class));
         verify(pacillianRepository, never()).save(any(Pacillian.class));
@@ -798,7 +804,8 @@ class ProfileServiceImplTest {
         // Set up security context
         mockSecurityContext();
 
-        // Important: Set pacillian's email to match the security context
+        // Important: Set pacillian's ID to match the security context ID
+        pacillian.setId(1L);
         pacillian.setEmail("test@example.com");
 
         // Create update request with same email as security context
@@ -808,8 +815,8 @@ class ProfileServiceImplTest {
         updateRequest.setPhoneNumber("089876543210");
         updateRequest.setMedicalHistory("Updated Medical History");
 
-        // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(pacillian));
+        // Setup mocks - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(pacillian));
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
 
         // Execute
@@ -820,11 +827,10 @@ class ProfileServiceImplTest {
         assertThat(response.getName()).isEqualTo("Updated Name");
         assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         verify(pacillianRepository).save(any(Pacillian.class));
         verify(pacillianRepository).flush();
         verify(userRepository, never()).existsByEmail(any());
-        verify(userRepository, never()).findById(any());
     }
 
     @Test
@@ -832,7 +838,8 @@ class ProfileServiceImplTest {
         // Set up security context
         mockSecurityContext();
 
-        // Important: Set careGiver's email to match the security context
+        // Important: Set careGiver's ID to match the security context ID
+        careGiver.setId(1L);
         careGiver.setEmail("test@example.com");
 
         // Create update request with same email as in the security context
@@ -843,8 +850,8 @@ class ProfileServiceImplTest {
         updateRequest.setSpeciality("Updated Speciality");
         updateRequest.setWorkAddress("Updated Work Address");
 
-        // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(careGiver));
+        // Setup mocks - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(careGiver));
         when(careGiverRepository.save(any(CareGiver.class))).thenReturn(careGiver);
 
         // Execute
@@ -856,11 +863,10 @@ class ProfileServiceImplTest {
         assertThat(response.getSpeciality()).isEqualTo("Updated Speciality");
         assertThat(response.getWorkAddress()).isEqualTo("Updated Work Address");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         verify(careGiverRepository).save(any(CareGiver.class));
         verify(careGiverRepository).flush();
         verify(userRepository, never()).existsByEmail(any());
-        verify(userRepository, never()).findById(any());
     }
 
     @Test
@@ -874,8 +880,8 @@ class ProfileServiceImplTest {
         updateRequest.setAddress("Updated Address");
         updateRequest.setPhoneNumber("089876543210");
 
-        // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Setup mocks - now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
         // Execute
@@ -885,13 +891,12 @@ class ProfileServiceImplTest {
         assertThat(response).isNotNull();
         assertThat(response.getName()).isEqualTo("Updated Name");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         verify(userRepository).save(any(User.class));
         verify(userRepository).flush();
         verify(pacillianRepository, never()).save(any());
         verify(careGiverRepository, never()).save(any());
         verify(userRepository, never()).existsByEmail(any());
-        verify(userRepository, never()).findById(any());
     }
 
     @Test
@@ -906,14 +911,15 @@ class ProfileServiceImplTest {
         updateRequest.setAddress("Updated Address");
         updateRequest.setPhoneNumber("089876543210");
 
-        // Setup mocks for email change path
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Setup mocks - using findById instead of findByEmail
+        // Return the user for both calls to findById
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user))
+                .thenReturn(Optional.of(user));
         when(userRepository.existsByEmail(newEmail)).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
-        // Add this line to mock the jwtUtils behavior
-        when(jwtUtils.generateJwtTokenFromUsername(newEmail)).thenReturn("new-jwt-token");
+        // Mock the JWT token generation with user ID
+        when(jwtUtils.generateJwtTokenFromUserId(user.getId().toString())).thenReturn("new-jwt-token");
 
         // Mock ServletRequestAttributes and HttpServletResponse
         ServletRequestAttributes requestAttributes = mock(ServletRequestAttributes.class);
@@ -928,11 +934,14 @@ class ProfileServiceImplTest {
         assertThat(response).isNotNull();
         assertThat(response.getName()).isEqualTo("Updated Name");
 
-        verify(userRepository).findByEmail("test@example.com");
+        // Verify the repository calls with user ID - now expecting 2 calls to findById
+        verify(userRepository, times(2)).findById(1L);
         verify(userRepository).existsByEmail(newEmail);
         verify(userRepository).save(any(User.class));
         verify(userRepository).flush();
-        verify(userRepository).findById(user.getId());
+
+        // Verify token generation using user ID
+        verify(jwtUtils).generateJwtTokenFromUserId(user.getId().toString());
 
         // Instead of verifying the exact value, just verify that the headers are set
         verify(httpResponse).setHeader(eq("Authorization"), anyString());
@@ -951,8 +960,8 @@ class ProfileServiceImplTest {
         String newEmail = "existing@example.com";
         updateRequest.setEmail(newEmail);
 
-        // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Setup mocks - using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.existsByEmail(newEmail)).thenReturn(true);
 
         // Execute and verify exception
@@ -960,7 +969,7 @@ class ProfileServiceImplTest {
                 .isInstanceOf(EmailAlreadyExistsException.class)
                 .hasMessageContaining("Email is already in use");
 
-        verify(userRepository).findByEmail("test@example.com");
+        verify(userRepository).findById(1L);
         verify(userRepository).existsByEmail(newEmail);
         verify(userRepository, never()).save(any());
     }
@@ -975,10 +984,10 @@ class ProfileServiceImplTest {
         updateRequest.setEmail(newEmail);
 
         // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user))
+                .thenReturn(Optional.of(user)); // Return user for both calls
         when(userRepository.existsByEmail(newEmail)).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
         // Set null request attributes
         RequestContextHolder.resetRequestAttributes();
@@ -988,7 +997,9 @@ class ProfileServiceImplTest {
 
         // Verify
         assertThat(response).isNotNull();
-        verify(userRepository).findById(user.getId());
+
+        // Verify findById was called twice (once for initial lookup, once after email change)
+        verify(userRepository, times(2)).findById(user.getId());
     }
 
     @Test
@@ -1000,11 +1011,14 @@ class ProfileServiceImplTest {
         String newEmail = "newemail@example.com";
         updateRequest.setEmail(newEmail);
 
+        // Set up user
+        user.setId(1L);
+        user.setEmail("test@example.com");
+
         // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.existsByEmail(newEmail)).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
         // Mock ServletRequestAttributes but with null HttpResponse
         ServletRequestAttributes requestAttributes = mock(ServletRequestAttributes.class);
@@ -1018,9 +1032,15 @@ class ProfileServiceImplTest {
         assertThat(response).isNotNull();
         verify(requestAttributes).getResponse();
 
+        // Verify repository calls
+        verify(userRepository, times(2)).findById(1L); // Changed from times(1) to times(2)
+        verify(userRepository).existsByEmail(newEmail);
+        verify(userRepository).save(any(User.class));
+
         // Reset RequestContextHolder
         RequestContextHolder.resetRequestAttributes();
     }
+
 
     @Test
     void updateCurrentUserProfile_UserNotFoundAfterUpdate() {
@@ -1031,18 +1051,21 @@ class ProfileServiceImplTest {
         String newEmail = "newemail@example.com";
         updateRequest.setEmail(newEmail);
 
-        // Setup mocks
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(user));
+        // Setup mocks - now using findById instead of findByEmail for both calls
+        // First findById call returns user, second returns empty
+        when(userRepository.findById(1L))
+                .thenReturn(Optional.of(user))  // First call returns user
+                .thenReturn(Optional.empty());  // Second call returns empty
         when(userRepository.existsByEmail(newEmail)).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
-        when(userRepository.findById(user.getId())).thenReturn(Optional.empty());
 
         // Execute and verify exception
         assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
                 .isInstanceOf(EntityNotFoundException.class)
                 .hasMessageContaining("User not found after update");
 
-        verify(userRepository).findById(user.getId());
+        // Verify findById was called twice
+        verify(userRepository, times(2)).findById(user.getId());
     }
 
 

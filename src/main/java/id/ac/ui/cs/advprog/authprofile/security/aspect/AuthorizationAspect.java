@@ -46,7 +46,18 @@ public class AuthorizationAspect {
         }
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        User user = userRepository.findByEmail(userDetails.getUsername())
+
+        // Parse user ID from userDetails
+        Long userId;
+        try {
+            userId = Long.parseLong(userDetails.getUsername());
+        } catch (NumberFormatException e) {
+            // Convert NumberFormatException to UnauthorizedException
+            throw new UnauthorizedException("Invalid user ID format: " + userDetails.getUsername());
+        }
+
+        // Find user by ID
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
 
         // Get the annotation details
@@ -68,8 +79,8 @@ public class AuthorizationAspect {
                 if (result != null) {
                     resourceId = result instanceof Long ? (Long) result : Long.valueOf(result.toString());
                 }
-            } catch (EvaluationException ex) {
-                // If we can't evaluate the expression, use null (which means no specific resource)
+            } catch (EvaluationException | NumberFormatException ex) {
+                // If we can't evaluate the expression or convert to Long, use null (which means no specific resource)
                 resourceId = null;
             }
         }

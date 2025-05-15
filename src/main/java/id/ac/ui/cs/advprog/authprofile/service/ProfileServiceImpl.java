@@ -3,6 +3,8 @@ package id.ac.ui.cs.advprog.authprofile.service;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
+import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
+import id.ac.ui.cs.advprog.authprofile.exception.UnauthorizedException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.User;
@@ -13,6 +15,7 @@ import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -51,8 +54,11 @@ public class  ProfileServiceImpl implements IProfileService {
      */
     @Override
     public ProfileResponse getCurrentUserProfile() {
-        String email = getCurrentUserEmail();
-        User user = userRepository.findByEmail(email)
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        // Get the current user by ID instead of by email
+        Long userId = Long.parseLong(userDetails.getUsername());
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
         return ProfileResponse.fromUser(user);
@@ -107,10 +113,15 @@ public class  ProfileServiceImpl implements IProfileService {
      */
     @Transactional
     public ProfileResponse updateCurrentUserProfile(UpdateProfileRequest updateRequest) {
-        String currentEmail = getCurrentUserEmail();
-        User user = userRepository.findByEmail(currentEmail)
+        // Get the current user ID from SecurityContext
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long userId = Long.parseLong(userDetails.getUsername());
+
+        // Find the user by ID
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
+        String currentEmail = user.getEmail();
         boolean emailChanged = false;
         String newEmail = null;
 
@@ -150,14 +161,16 @@ public class  ProfileServiceImpl implements IProfileService {
             userRepository.flush();
         }
 
-        // If email was changed, we need to update the JWT token
+        // If email was changed, we still need to update the JWT token
+        // The token itself doesn't need to change since it now contains the user ID (which is unchanged)
+        // But we'll still provide a new token for consistency and to update the client
         if (emailChanged) {
             // Re-fetch the user to ensure we have the latest data
-            user = userRepository.findById(user.getId())
+            user = userRepository.findById(userId)
                     .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
 
-            // Use a direct approach to generate a token instead of going through authentication
-            String jwt = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
+            // Generate a new token using the user ID (remains the same)
+            String jwt = jwtUtils.generateJwtTokenFromUserId(userId.toString());
 
             // Get the current HTTP response to add the new token as a header
             ServletRequestAttributes requestAttributes =
@@ -174,32 +187,24 @@ public class  ProfileServiceImpl implements IProfileService {
         return ProfileResponse.fromUser(user);
     }
 
-
     /**
      * Delete the current user's account
      */
     @Override
     @Transactional
     public void deleteCurrentUserAccount() {
-        String email = getCurrentUserEmail();
-        User user = userRepository.findByEmail(email)
+        // Get the current user ID from security context
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long userId = Long.parseLong(userDetails.getUsername());
+
+        // Find user by ID
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
         userRepository.delete(user);
     }
 
-    /**
-     * Helper method to get the current logged-in user's email
-     */
-    private String getCurrentUserEmail() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 
-        if (principal instanceof UserDetails) {
-            return ((UserDetails) principal).getUsername();
-        } else {
-            return principal.toString();
-        }
-    }
     @Override
     public List<ProfileResponse> getAllCareGiversLite() {
         List<CareGiver> careGivers = careGiverRepository.findAll();

@@ -33,12 +33,13 @@ public class UserDetailsServiceImplTest {
     private User testUser;
     private final String testEmail = "test@example.com";
     private final String testPassword = "password123";
+    private final Long testUserId = 1L;
 
     @BeforeEach
     public void setup() {
         // Create a test user with roles
         testUser = new User();
-        testUser.setId(1L);
+        testUser.setId(testUserId);
         testUser.setEmail(testEmail);
         testUser.setPassword(testPassword);
         testUser.setName("Test User");
@@ -63,7 +64,7 @@ public class UserDetailsServiceImplTest {
     }
 
     @Test
-    public void loadUserByUsername_UserExists_ReturnsUserDetails() {
+    public void loadUserByUsername_WithEmail_UserExists_ReturnsUserDetails() {
         // Arrange
         when(userRepository.findByEmail(testEmail)).thenReturn(Optional.of(testUser));
 
@@ -72,7 +73,8 @@ public class UserDetailsServiceImplTest {
 
         // Assert
         assertNotNull(userDetails);
-        assertEquals(testEmail, userDetails.getUsername());
+        // Now username should be the user's ID as a string
+        assertEquals(testUserId.toString(), userDetails.getUsername());
         assertEquals(testPassword, userDetails.getPassword());
         assertEquals(2, userDetails.getAuthorities().size());
 
@@ -90,7 +92,28 @@ public class UserDetailsServiceImplTest {
     }
 
     @Test
-    public void loadUserByUsername_UserNotFound_ThrowsException() {
+    public void loadUserByUsername_WithUserId_UserExists_ReturnsUserDetails() {
+        // Arrange
+        String userIdString = testUserId.toString();
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
+
+        // Act
+        UserDetails userDetails = userDetailsService.loadUserByUsername(userIdString);
+
+        // Assert
+        assertNotNull(userDetails);
+        assertEquals(userIdString, userDetails.getUsername());
+        assertEquals(testPassword, userDetails.getPassword());
+        assertEquals(2, userDetails.getAuthorities().size());
+
+        // Verify repository was called once with the correct ID
+        verify(userRepository, times(1)).findById(testUserId);
+        // Verify findByEmail was not called
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    public void loadUserByUsername_WithEmail_UserNotFound_ThrowsException() {
         // Arrange
         String nonExistentEmail = "nonexistent@example.com";
         when(userRepository.findByEmail(nonExistentEmail)).thenReturn(Optional.empty());
@@ -106,31 +129,114 @@ public class UserDetailsServiceImplTest {
     }
 
     @Test
+    public void loadUserByUsername_WithUserId_UserNotFound_ThrowsException() {
+        // Arrange
+        Long nonExistentId = 999L;
+        String nonExistentIdString = nonExistentId.toString();
+        when(userRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        UsernameNotFoundException exception = assertThrows(
+                UsernameNotFoundException.class,
+                () -> userDetailsService.loadUserByUsername(nonExistentIdString)
+        );
+
+        assertEquals("User Not Found with id: " + nonExistentId, exception.getMessage());
+        verify(userRepository, times(1)).findById(nonExistentId);
+    }
+
+    @Test
+    public void loadUserByUsername_WithInvalidUserId_ThrowsException() {
+        // Arrange
+        String invalidUserId = "not-a-number";
+
+        // Should fall back to email-based lookup - set up BEFORE the action
+        when(userRepository.findByEmail(invalidUserId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        UsernameNotFoundException exception = assertThrows(
+                UsernameNotFoundException.class,
+                () -> userDetailsService.loadUserByUsername(invalidUserId)
+        );
+
+        // Verify the exception message
+        assertEquals("User Not Found with email: " + invalidUserId, exception.getMessage());
+
+        // Verify the repository was called with the correct email
+        verify(userRepository, times(1)).findByEmail(invalidUserId);
+    }
+
+    @Test
+    public void loadUserById_UserExists_ReturnsUserDetails() {
+        // Arrange
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
+
+        // Act
+        UserDetails userDetails = userDetailsService.loadUserById(testUserId);
+
+        // Assert
+        assertNotNull(userDetails);
+        assertEquals(testUserId.toString(), userDetails.getUsername());
+        assertEquals(testPassword, userDetails.getPassword());
+        assertEquals(2, userDetails.getAuthorities().size());
+
+        // Verify authorities contain expected roles
+        assertTrue(userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(role -> role.equals("ROLE_PACILLIAN")));
+
+        assertTrue(userDetails.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(role -> role.equals("ROLE_CAREGIVER")));
+
+        // Verify repository was called once with the correct ID
+        verify(userRepository, times(1)).findById(testUserId);
+    }
+
+    @Test
+    public void loadUserById_UserNotFound_ThrowsException() {
+        // Arrange
+        Long nonExistentId = 999L;
+        when(userRepository.findById(nonExistentId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        UsernameNotFoundException exception = assertThrows(
+                UsernameNotFoundException.class,
+                () -> userDetailsService.loadUserById(nonExistentId)
+        );
+
+        assertEquals("User Not Found with id: " + nonExistentId, exception.getMessage());
+        verify(userRepository, times(1)).findById(nonExistentId);
+    }
+
+    @Test
     public void loadUserByUsername_UserWithNoRoles_ReturnsUserDetailsWithNoAuthorities() {
         // Arrange
         User userWithNoRoles = new User();
+        userWithNoRoles.setId(testUserId);
         userWithNoRoles.setEmail(testEmail);
         userWithNoRoles.setPassword(testPassword);
         userWithNoRoles.setRoles(new HashSet<>());  // Empty roles set
 
-        when(userRepository.findByEmail(testEmail)).thenReturn(Optional.of(userWithNoRoles));
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(userWithNoRoles));
 
         // Act
-        UserDetails userDetails = userDetailsService.loadUserByUsername(testEmail);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(testUserId.toString());
 
         // Assert
         assertNotNull(userDetails);
-        assertEquals(testEmail, userDetails.getUsername());
+        assertEquals(testUserId.toString(), userDetails.getUsername());
         assertEquals(testPassword, userDetails.getPassword());
         assertEquals(0, userDetails.getAuthorities().size());
 
-        verify(userRepository, times(1)).findByEmail(testEmail);
+        verify(userRepository, times(1)).findById(testUserId);
     }
 
     @Test
     public void loadUserByUsername_UserWithSingleRole_ReturnsUserDetailsWithSingleAuthority() {
         // Arrange
         User userWithSingleRole = new User();
+        userWithSingleRole.setId(testUserId);
         userWithSingleRole.setEmail(testEmail);
         userWithSingleRole.setPassword(testPassword);
 
@@ -142,20 +248,20 @@ public class UserDetailsServiceImplTest {
 
         userWithSingleRole.setRoles(singleRole);
 
-        when(userRepository.findByEmail(testEmail)).thenReturn(Optional.of(userWithSingleRole));
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(userWithSingleRole));
 
         // Act
-        UserDetails userDetails = userDetailsService.loadUserByUsername(testEmail);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(testUserId.toString());
 
         // Assert
         assertNotNull(userDetails);
-        assertEquals(testEmail, userDetails.getUsername());
+        assertEquals(testUserId.toString(), userDetails.getUsername());
         assertEquals(testPassword, userDetails.getPassword());
         assertEquals(1, userDetails.getAuthorities().size());
 
         SimpleGrantedAuthority expectedAuthority = new SimpleGrantedAuthority("ROLE_PACILLIAN");
         assertTrue(userDetails.getAuthorities().contains(expectedAuthority));
 
-        verify(userRepository, times(1)).findByEmail(testEmail);
+        verify(userRepository, times(1)).findById(testUserId);
     }
 }

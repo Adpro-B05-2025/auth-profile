@@ -28,6 +28,7 @@ public class JwtUtilsTest {
 
     private final String jwtSecret = "pandaCareTestSecretKey123456789012345678901234567890";
     private final int jwtExpirationMs = 3600000; // 1 hour
+    private final String userId = "123"; // Using user ID instead of email
 
     @BeforeEach
     public void setup() {
@@ -39,9 +40,8 @@ public class JwtUtilsTest {
     @Test
     public void testGenerateJwtToken() {
         // Arrange
-        String email = "test@example.com";
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn(email);
+        when(userDetails.getUsername()).thenReturn(userId); // Now using user ID
 
         // Act
         String token = jwtUtils.generateJwtToken(authentication);
@@ -52,26 +52,25 @@ public class JwtUtilsTest {
     }
 
     @Test
-    public void testGetUserNameFromJwtToken() {
+    public void testGetUserIdFromJwtToken() {
         // Arrange
-        String email = "test@example.com";
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn(email);
+        when(userDetails.getUsername()).thenReturn(userId); // Now using user ID
 
         String token = jwtUtils.generateJwtToken(authentication);
 
         // Act
-        String extractedEmail = jwtUtils.getUserNameFromJwtToken(token);
+        String extractedUserId = jwtUtils.getUserIdFromJwtToken(token); // Method name updated
 
         // Assert
-        assertEquals(email, extractedEmail);
+        assertEquals(userId, extractedUserId);
     }
 
     @Test
     public void testValidateJwtToken_ValidToken() {
         // Arrange
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+        when(userDetails.getUsername()).thenReturn(userId); // Now using user ID
         String token = jwtUtils.generateJwtToken(authentication);
 
         // Act
@@ -98,7 +97,7 @@ public class JwtUtilsTest {
         ReflectionTestUtils.setField(shortExpirationJwtUtils, "jwtExpirationMs", 1); // 1 millisecond expiration
 
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+        when(userDetails.getUsername()).thenReturn(userId); // Now using user ID
         String token = shortExpirationJwtUtils.generateJwtToken(authentication);
 
         // Wait for token to expire
@@ -140,7 +139,7 @@ public class JwtUtilsTest {
         // Let's create a token that uses an unsupported algorithm (RS256) when the application
         // is configured for HS256
         String unsupportedToken = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" + // header with RS256 algorithm
-                ".eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiaWF0IjoxNTE2MjM5MDIyfQ" + // payload
+                ".eyJzdWIiOiIxMjMiLCJpYXQiOjE1MTYyMzkwMjJ9" + // payload with userId "123" instead of email
                 ".RSASHA256Signature"; // invalid signature for demo
 
         // Act
@@ -154,20 +153,20 @@ public class JwtUtilsTest {
     }
 
     @Test
-    public void testGenerateJwtTokenFromUsername() {
-        // Arrange
-        String username = "test@example.com";
+    public void testGenerateJwtTokenFromUserId() {
+        // Arrange - Note method name change
+        String userId = "123"; // Using user ID instead of email
 
         // Act
-        String token = jwtUtils.generateJwtTokenFromUsername(username);
+        String token = jwtUtils.generateJwtTokenFromUserId(userId); // Method name updated
 
         // Assert
         assertNotNull(token);
         assertFalse(token.isEmpty());
 
-        // Verify the token contains the expected username
-        String extractedUsername = jwtUtils.getUserNameFromJwtToken(token);
-        assertEquals(username, extractedUsername);
+        // Verify the token contains the expected user ID
+        String extractedUserId = jwtUtils.getUserIdFromJwtToken(token); // Method name updated
+        assertEquals(userId, extractedUserId);
 
         // Verify the token is valid
         boolean isValid = jwtUtils.validateJwtToken(token);
