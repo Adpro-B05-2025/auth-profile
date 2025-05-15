@@ -20,8 +20,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.lang.reflect.Method;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -66,13 +65,17 @@ class AuthorizationAspectTest {
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn(userDetails);
-        when(userDetails.getUsername()).thenReturn("test@example.com");
+
+        // Now using ID as username instead of email
+        when(userDetails.getUsername()).thenReturn("1");
 
         // Set up user
         testUser = new User();
         testUser.setId(1L);
         testUser.setEmail("test@example.com");
-        when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(testUser));
+
+        // Now using findById instead of findByEmail
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
         // Set up join point and method signature
         when(joinPoint.getSignature()).thenReturn(methodSignature);
@@ -113,7 +116,9 @@ class AuthorizationAspectTest {
 
     @Test
     void whenUserNotFound_thenThrowUnauthorizedException() {
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        // Using non-existent user ID
+        when(userDetails.getUsername()).thenReturn("999");
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
         // Set up a mock annotation for the method
         RequiresAuthorization annotation = createMockAnnotation("TEST_ACTION", "#args[0]");
@@ -215,6 +220,24 @@ class AuthorizationAspectTest {
         assertDoesNotThrow(() -> {
             authorizationAspect.checkAuthorization(joinPoint);
         }, "Should not throw when SpEL expression returns null");
+    }
+
+    @Test
+    void whenUserIdIsInvalidFormat_thenThrowUnauthorizedException() {
+        // Set up with a non-numeric username
+        when(userDetails.getUsername()).thenReturn("not-a-number");
+
+        // Set up a mock annotation
+        RequiresAuthorization annotation = createMockAnnotation("TEST_ACTION", "#args[0]");
+        when(method.getAnnotation(RequiresAuthorization.class)).thenReturn(annotation);
+
+        // Should throw UnauthorizedException when user ID can't be parsed
+        UnauthorizedException exception = assertThrows(UnauthorizedException.class, () -> {
+            authorizationAspect.checkAuthorization(joinPoint);
+        }, "Should throw UnauthorizedException when user ID format is invalid");
+
+        // Verify the exception message contains information about the invalid format
+        assertTrue(exception.getMessage().contains("Invalid user ID format"));
     }
 
     // Helper method to create a mock annotation
