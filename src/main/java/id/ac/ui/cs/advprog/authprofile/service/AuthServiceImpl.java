@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -74,12 +75,17 @@ public class AuthServiceImpl implements IAuthService {
         String jwt = jwtUtils.generateJwtToken(authentication);
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
+        // Extract user ID from userDetails
+        Long userId = Long.parseLong(userDetails.getUsername());
+
+        // Find user by ID
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
         List<String> roles = userDetails.getAuthorities().stream()
                 .map(item -> item.getAuthority())
                 .collect(Collectors.toList());
-
-        User user = userRepository.findByEmail(userDetails.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
 
         return new JwtResponse(jwt, user.getId(), user.getEmail(), user.getName(), roles);
     }
@@ -87,45 +93,26 @@ public class AuthServiceImpl implements IAuthService {
     @Override
     public TokenValidationResponse validateToken(String token) {
         try {
-            // Validate JWT token
-            boolean isValid = jwtUtils.validateJwtToken(token);
-            if (!isValid) {
-                return new TokenValidationResponse(false, null, null, null);
+            if (jwtUtils.validateJwtToken(token)) {
+                String userId = jwtUtils.getUserIdFromJwtToken(token);
+                Optional<User> userOpt = userRepository.findById(Long.parseLong(userId));
+
+                if (userOpt.isPresent()) {
+                    User user = userOpt.get();
+                    List<String> roles = user.getRoles().stream()
+                            .map(role -> role.getName().name())
+                            .collect(Collectors.toList());
+
+                    return new TokenValidationResponse(true, user.getId(), user.getEmail(), roles);
+                }
             }
-
-            // Extract username from token
-            String username = jwtUtils.getUserNameFromJwtToken(token);
-
-            // Find the user
-            User user = userRepository.findByEmail(username)
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + username));
-
-            // Extract roles
-            List<String> roles = user.getRoles().stream()
-                    .map(role -> role.getName().name())
-                    .collect(Collectors.toList());
-
-            // Return validation response
-            return new TokenValidationResponse(true, user.getId(), username, roles);
-
         } catch (Exception e) {
-            return new TokenValidationResponse(false, null, null, null);
+            // Token validation failed
         }
+
+        return new TokenValidationResponse(false, null, null, null);
     }
 
-    @Override
-    public JwtResponse regenerateToken(User user) {
-        // Skip authentication and directly generate a token
-        String jwt = jwtUtils.generateJwtTokenFromUsername(user.getEmail());
-
-        // Get user roles
-        List<String> roles = user.getRoles().stream()
-                .map(role -> role.getName().name())
-                .collect(Collectors.toList());
-
-        // Return JWT response
-        return new JwtResponse(jwt, user.getId(), user.getEmail(), user.getName(), roles);
-    }
 
     /**
      * Validates common aspects of registration requests
