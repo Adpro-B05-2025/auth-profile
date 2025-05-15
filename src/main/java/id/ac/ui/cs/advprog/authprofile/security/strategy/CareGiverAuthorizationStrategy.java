@@ -18,19 +18,25 @@ public class CareGiverAuthorizationStrategy implements AuthorizationStrategy {
 
         // Check specific actions
         switch (action) {
+            // Profile viewing permissions
             case "VIEW_OWN_PROFILE":
-                // CareGivers can always view their own profile
-                return true;
             case "VIEW_PROFILE":
-                // CareGivers can view any profile
+                // CareGivers can view any profile, including their own
                 return true;
+            // Profile modification permissions
             case "UPDATE_PROFILE":
             case "DELETE_PROFILE":
                 // CareGivers can only update/delete their own profile
                 return resourceId == null || user.getId().equals(resourceId);
+            // Medical data access permissions
             case "VIEW_PACILLIAN_MEDICAL_HISTORY":
                 // CareGivers can view any Pacillian's medical history
                 return true;
+            // Caregiver viewing permissions
+            case "VIEW_CAREGIVER":
+                // All Pacillians can view caregiver details
+                return true;
+            // Default case - deny access for any other actions
             default:
                 return false;
         }
