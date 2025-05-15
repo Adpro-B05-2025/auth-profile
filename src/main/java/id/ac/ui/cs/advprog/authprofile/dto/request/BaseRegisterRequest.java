@@ -1,5 +1,7 @@
 package id.ac.ui.cs.advprog.authprofile.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -12,6 +14,11 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "userType")
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = RegisterPacillianRequest.class, name = "PACILLIAN"),
+        @JsonSubTypes.Type(value = RegisterCareGiverRequest.class, name = "CAREGIVER")
+})
 public class BaseRegisterRequest {
 
     @NotBlank(message = "Email is required")

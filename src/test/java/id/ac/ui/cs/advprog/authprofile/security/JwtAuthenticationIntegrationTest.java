@@ -141,7 +141,7 @@ public class JwtAuthenticationIntegrationTest {
     @Test
     void fullAuthenticationFlow() throws Exception {
         // 1. Register a new pacillian
-        mockMvc.perform(post("/api/auth/register/pacillian")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk())
@@ -178,13 +178,13 @@ public class JwtAuthenticationIntegrationTest {
     @Test
     void registerWithExistingEmail_ShouldReturnError() throws Exception {
         // First registration
-        mockMvc.perform(post("/api/auth/register/pacillian")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
         // Second registration with same email
-        mockMvc.perform(post("/api/auth/register/pacillian")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isConflict());
@@ -193,7 +193,7 @@ public class JwtAuthenticationIntegrationTest {
     @Test
     void loginWithInvalidCredentials_ShouldReturnError() throws Exception {
         // Register user
-        mockMvc.perform(post("/api/auth/register/pacillian")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());

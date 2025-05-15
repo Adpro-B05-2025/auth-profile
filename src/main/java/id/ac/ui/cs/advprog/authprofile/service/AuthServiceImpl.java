@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
@@ -7,6 +8,7 @@ import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
+import id.ac.ui.cs.advprog.authprofile.factory.UserFactory;
 import id.ac.ui.cs.advprog.authprofile.factory.UserFactoryProvider;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
@@ -83,34 +85,6 @@ public class AuthServiceImpl implements IAuthService {
     }
 
     @Override
-    @Transactional
-    public String registerPacillian(RegisterPacillianRequest registerRequest) {
-        validateRegistrationRequest(registerRequest);
-
-        // Use factory pattern to create Pacillian user
-        Pacillian pacillian = (Pacillian) factoryProvider.getFactory(registerRequest)
-                .createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
-
-        pacillianRepository.save(pacillian);
-
-        return "Pacillian registered successfully!";
-    }
-
-    @Override
-    @Transactional
-    public String registerCareGiver(RegisterCareGiverRequest registerRequest) {
-        validateRegistrationRequest(registerRequest);
-
-        // Use factory pattern to create CareGiver user
-        CareGiver careGiver = (CareGiver) factoryProvider.getFactory(registerRequest)
-                .createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
-
-        careGiverRepository.save(careGiver);
-
-        return "CareGiver registered successfully!";
-    }
-
-    @Override
     public TokenValidationResponse validateToken(String token) {
         try {
             // Validate JWT token
@@ -167,8 +141,26 @@ public class AuthServiceImpl implements IAuthService {
         }
     }
 
-    public String generateTokenWithoutAuthentication(User user) {
-        // Just create a token directly for the user's email
-        return jwtUtils.generateJwtTokenFromUsername(user.getEmail());
+    @Override
+    @Transactional
+    public String registerUser(BaseRegisterRequest registerRequest) {
+        validateRegistrationRequest(registerRequest);
+
+        // Get the appropriate factory for this request type
+        UserFactory factory = factoryProvider.getFactory(registerRequest);
+
+        // Use the factory to create the user entity
+        User user = factory.createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
+
+        // Save the user to the appropriate repository
+        if (user instanceof Pacillian) {
+            pacillianRepository.save((Pacillian) user);
+            return "Pacillian registered successfully!";
+        } else if (user instanceof CareGiver) {
+            careGiverRepository.save((CareGiver) user);
+            return "CareGiver registered successfully!";
+        }
+
+        throw new IllegalArgumentException("Unsupported user type");
     }
 }
