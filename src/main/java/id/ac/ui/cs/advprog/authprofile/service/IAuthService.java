@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
@@ -16,19 +17,7 @@ public interface IAuthService {
      */
     JwtResponse authenticateUser(LoginRequest loginRequest);
 
-    /**
-     * Registers a new Pacillian (patient) user
-     * @param registerRequest the registration details
-     * @return success message
-     */
-    String registerPacillian(RegisterPacillianRequest registerRequest);
 
-    /**
-     * Registers a new CareGiver (doctor) user
-     * @param registerRequest the registration details
-     * @return success message
-     */
-    String registerCareGiver(RegisterCareGiverRequest registerRequest);
 
     /**
      * Validates a JWT token and returns user information if valid
@@ -44,6 +33,6 @@ public interface IAuthService {
      */
     JwtResponse regenerateToken(User user);
 
-    String generateTokenWithoutAuthentication(User user);
+    String registerUser(BaseRegisterRequest registerRequest);
 
 }
