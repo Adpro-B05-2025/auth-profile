@@ -140,4 +140,11 @@ class CareGiverAuthorizationStrategyTest {
     void supportsUserTypeReturnsFalseForNull() {
         assertFalse(strategy.supportsUserType(null), "Strategy should not support null user");
     }
+
+    @Test
+    void whenCareGiverViewsCareGiverWithViewCaregiverAction_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, 1L, "VIEW_CAREGIVER");
+        assertTrue(result, "CareGiver should be able to view caregiver profiles through VIEW_CAREGIVER action");
+    }
+
 }
