@@ -99,10 +99,10 @@ class AuthControllerTest {
     void registerPacillian_ShouldReturnSuccessMessage() throws Exception {
         // Given
         String successMessage = "Pacillian registered successfully!";
-        when(authService.registerPacillian(any(RegisterPacillianRequest.class))).thenReturn(successMessage);
+        when(authService.registerUser(any(RegisterPacillianRequest.class))).thenReturn(successMessage);
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/pacillian")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(pacillianRequest)))
                 .andExpect(status().isOk())
@@ -115,10 +115,10 @@ class AuthControllerTest {
     void registerCareGiver_ShouldReturnSuccessMessage() throws Exception {
         // Given
         String successMessage = "CareGiver registered successfully!";
-        when(authService.registerCareGiver(any(RegisterCareGiverRequest.class))).thenReturn(successMessage);
+        when(authService.registerUser(any(RegisterCareGiverRequest.class))).thenReturn(successMessage);
 
         // When & Then
-        mockMvc.perform(post("/api/auth/register/caregiver")
+        mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(careGiverRequest)))
                 .andExpect(status().isOk())
