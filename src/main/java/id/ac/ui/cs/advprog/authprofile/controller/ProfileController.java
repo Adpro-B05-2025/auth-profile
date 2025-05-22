@@ -8,13 +8,9 @@ import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,11 +80,9 @@ public class ProfileController {
     @GetMapping("/caregiver/search")
     public ResponseEntity<List<ProfileResponse>> searchCareGivers(
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String speciality,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) DayOfWeek dayOfWeek,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime time) {
+            @RequestParam(required = false) String speciality) {
 
-        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality, dayOfWeek, time);
+        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality);
         return ResponseEntity.ok(careGivers);
     }
 

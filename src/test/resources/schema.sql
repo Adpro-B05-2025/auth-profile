@@ -44,14 +44,3 @@ CREATE TABLE IF NOT EXISTS caregivers (
     rating_count INT DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users (id)
     );
-
--- Create working_schedules table
-CREATE TABLE IF NOT EXISTS working_schedules (
-                                                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                                                 caregiver_id BIGINT NOT NULL,
-                                                 day_of_week VARCHAR(20) NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    is_available BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (caregiver_id) REFERENCES caregivers (user_id)
-    );

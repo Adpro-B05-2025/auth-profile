@@ -3,13 +3,10 @@ package id.ac.ui.cs.advprog.authprofile.dto.response;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,17 +30,6 @@ public class ProfileResponse {
     private String speciality;
     private String workAddress;
     private Double averageRating;
-    private List<WorkingScheduleDto> workingSchedules;
-
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class WorkingScheduleDto {
-        private DayOfWeek dayOfWeek;
-        private LocalTime startTime;
-        private LocalTime endTime;
-        private boolean isAvailable;
-    }
 
     public static ProfileResponse fromUser(User user) {
         ProfileResponse response = new ProfileResponse();
@@ -66,16 +52,6 @@ public class ProfileResponse {
             response.setSpeciality(careGiver.getSpeciality());
             response.setWorkAddress(careGiver.getWorkAddress());
             response.setAverageRating(careGiver.getAverageRating());
-
-            List<WorkingScheduleDto> schedules = careGiver.getWorkingSchedules().stream()
-                    .map(schedule -> new WorkingScheduleDto(
-                            schedule.getDayOfWeek(),
-                            schedule.getStartTime(),
-                            schedule.getEndTime(),
-                            schedule.isAvailable()
-                    ))
-                    .collect(Collectors.toList());
-            response.setWorkingSchedules(schedules);
         }
 
         return response;
