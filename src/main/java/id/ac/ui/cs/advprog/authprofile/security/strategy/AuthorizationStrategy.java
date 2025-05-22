@@ -5,6 +5,7 @@ import id.ac.ui.cs.advprog.authprofile.model.User;
 public interface AuthorizationStrategy {
 
     // Action constants for better maintainability
+    String VIEW_USERNAME = "VIEW_USERNAME";
     String VIEW_OWN_PROFILE = "VIEW_OWN_PROFILE";
     String VIEW_PROFILE = "VIEW_PROFILE";
     String UPDATE_PROFILE = "UPDATE_PROFILE";

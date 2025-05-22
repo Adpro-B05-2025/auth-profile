@@ -17,7 +17,7 @@ public class CareGiverAuthorizationStrategy extends BaseAuthorizationStrategy {
 
         return switch (action) {
             // CareGivers have broad viewing permissions
-            case VIEW_OWN_PROFILE, VIEW_PROFILE, VIEW_CAREGIVER -> true;
+            case VIEW_USERNAME, VIEW_OWN_PROFILE, VIEW_PROFILE, VIEW_CAREGIVER -> true;
 
             // CareGivers can view any Pacillian's medical history
             case VIEW_PACILLIAN_MEDICAL_HISTORY -> true;

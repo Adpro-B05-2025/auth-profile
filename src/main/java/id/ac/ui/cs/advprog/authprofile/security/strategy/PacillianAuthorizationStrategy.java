@@ -27,7 +27,7 @@ public class PacillianAuthorizationStrategy extends BaseAuthorizationStrategy {
 
         return switch (action) {
             // Pacillians can always view their own profile info
-            case VIEW_OWN_PROFILE -> true;
+            case VIEW_USERNAME, VIEW_OWN_PROFILE -> true;
 
             // Pacillians can view any caregiver profile
             case VIEW_CAREGIVER -> true;

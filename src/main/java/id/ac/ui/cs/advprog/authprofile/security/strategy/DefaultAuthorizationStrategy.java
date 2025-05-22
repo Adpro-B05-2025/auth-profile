@@ -16,7 +16,7 @@ public class DefaultAuthorizationStrategy extends BaseAuthorizationStrategy {
     public boolean isAuthorized(User user, Long resourceId, String action) {
         return switch (action) {
             // Basic permissions any user should have
-            case VIEW_OWN_PROFILE -> true;
+            case VIEW_OWN_PROFILE, VIEW_USERNAME -> true;
 
             // Handle modification actions using base class logic
             case UPDATE_PROFILE, DELETE_PROFILE -> handleModificationActions(user, resourceId, action);
