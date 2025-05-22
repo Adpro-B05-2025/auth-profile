@@ -69,7 +69,6 @@ class AuthControllerTest {
         careGiverRequest.setPhoneNumber("089876543210");
         careGiverRequest.setSpeciality("General");
         careGiverRequest.setWorkAddress("Test Hospital");
-        careGiverRequest.setWorkingSchedules(null);
 
         jwtResponse = new JwtResponse("test_jwt_token", 1L, "test@example.com", "Test User", Arrays.asList("ROLE_PACILLIAN"));
 

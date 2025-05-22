@@ -3,8 +3,6 @@ package id.ac.ui.cs.advprog.authprofile.service;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
-import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
-import id.ac.ui.cs.advprog.authprofile.exception.UnauthorizedException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.User;
@@ -15,7 +13,6 @@ import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -23,14 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-public class  ProfileServiceImpl implements IProfileService {
+public class ProfileServiceImpl implements IProfileService {
 
     private final UserRepository userRepository;
     private final PacillianRepository pacillianRepository;
@@ -204,7 +198,6 @@ public class  ProfileServiceImpl implements IProfileService {
         userRepository.delete(user);
     }
 
-
     @Override
     public List<ProfileResponse> getAllCareGiversLite() {
         List<CareGiver> careGivers = careGiverRepository.findAll();
@@ -251,20 +244,6 @@ public class  ProfileServiceImpl implements IProfileService {
         response.setWorkAddress(careGiver.getWorkAddress());
         response.setAverageRating(careGiver.getAverageRating());
 
-        // Map working schedules
-        List<ProfileResponse.WorkingScheduleDto> schedules = new ArrayList<>();
-        if (careGiver.getWorkingSchedules() != null) {
-            schedules = careGiver.getWorkingSchedules().stream()
-                    .map(schedule -> new ProfileResponse.WorkingScheduleDto(
-                            schedule.getDayOfWeek(),
-                            schedule.getStartTime(),
-                            schedule.getEndTime(),
-                            schedule.isAvailable()
-                    ))
-                    .collect(Collectors.toList());
-        }
-        response.setWorkingSchedules(schedules);
-
         return response;
     }
 
@@ -273,43 +252,6 @@ public class  ProfileServiceImpl implements IProfileService {
         CareGiver careGiver = careGiverRepository.findById(caregiverId)
                 .orElseThrow(() -> new EntityNotFoundException("Caregiver not found with id: " + caregiverId));
 
-        // No need for type check since repository is already typed to CareGiver
-
         return createLiteProfileResponse(careGiver);
     }
-
-    @Override
-    public List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time) {
-        List<CareGiver> careGivers;
-
-        // Handle all possible combinations of search parameters
-        if (dayOfWeek != null && time != null) {
-            // When schedule filtering is requested
-            if (name != null && speciality != null) {
-                // Search by name, speciality, day and time
-                careGivers = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time);
-            } else if (name != null) {
-                // Search by name, day and time
-                careGivers = careGiverRepository.findByNameAndAvailableDayAndTime(name, dayOfWeek, time);
-            } else if (speciality != null) {
-                // Search by speciality, day and time
-                careGivers = careGiverRepository.findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time);
-            } else {
-                // Search by day and time only
-                careGivers = careGiverRepository.findByAvailableDayAndTime(dayOfWeek, time);
-            }
-        } else if (dayOfWeek != null) {
-            // Search by day only
-            careGivers = careGiverRepository.findByAvailableDayOfWeek(dayOfWeek);
-        } else {
-            // Fall back to existing search without schedule filtering
-            return searchCareGiversLite(name, speciality);
-        }
-
-        return careGivers.stream()
-                .map(this::createLiteProfileResponse)
-                .collect(Collectors.toList());
-    }
-
-
 }
