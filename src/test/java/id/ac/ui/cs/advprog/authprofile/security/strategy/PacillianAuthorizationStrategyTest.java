@@ -171,4 +171,23 @@ class PacillianAuthorizationStrategyTest {
     void supportsUserTypeReturnsFalseForNull() {
         assertFalse(strategy.supportsUserType(null), "Strategy should not support null user");
     }
+    @Test
+    void whenPacillianViewsUsername_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(pacillian, null, "VIEW_USERNAME");
+        assertTrue(result, "Pacillian should be able to view usernames");
+    }
+
+    @Test
+    void whenPacillianViewsUsernameWithResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(pacillian, 1L, "VIEW_USERNAME");
+        assertTrue(result, "Pacillian should be able to view usernames regardless of resourceId");
+    }
+
+    @Test
+    void whenNonPacillianViewsUsername_thenReturnFalse() {
+        boolean result = strategy.isAuthorized(nonPacillian, null, "VIEW_USERNAME");
+        assertFalse(result, "Non-Pacillian users should not be authorized for VIEW_USERNAME");
+    }
+
+
 }
