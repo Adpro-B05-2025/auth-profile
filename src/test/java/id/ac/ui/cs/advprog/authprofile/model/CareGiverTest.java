@@ -35,33 +35,8 @@ class CareGiverTest {
         assertThat(careGiver.getWorkAddress()).isEqualTo(workAddress);
         assertThat(careGiver.getAverageRating()).isEqualTo(0.0);
         assertThat(careGiver.getRatingCount()).isEqualTo(0);
-        assertThat(careGiver.getWorkingSchedules()).isNotNull().isEmpty();
     }
 
-    @Test
-    void addAndRemoveWorkingSchedule_ShouldUpdateWorkingSchedulesList() {
-        // given
-        CareGiver careGiver = new CareGiver();
-        WorkingSchedule schedule = new WorkingSchedule();
-        schedule.setDayOfWeek(DayOfWeek.MONDAY);
-        schedule.setStartTime(LocalTime.of(8, 0));
-        schedule.setEndTime(LocalTime.of(16, 0));
-
-        // when - add schedule
-        careGiver.addWorkingSchedule(schedule);
-
-        // then
-        assertThat(careGiver.getWorkingSchedules()).hasSize(1);
-        assertThat(careGiver.getWorkingSchedules().get(0)).isEqualTo(schedule);
-        assertThat(schedule.getCareGiver()).isEqualTo(careGiver);
-
-        // when - remove schedule
-        careGiver.removeWorkingSchedule(schedule);
-
-        // then
-        assertThat(careGiver.getWorkingSchedules()).isEmpty();
-        assertThat(schedule.getCareGiver()).isNull();
-    }
 
     @Test
     void updateRating_ShouldCalculateAverageRating() {

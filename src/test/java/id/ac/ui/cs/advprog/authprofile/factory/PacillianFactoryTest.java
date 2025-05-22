@@ -52,14 +52,6 @@ class PacillianFactoryTest {
         pacillianRequest.setPhoneNumber("081234567890");
         pacillianRequest.setMedicalHistory("No significant history");
 
-        // Set up caregiver request for testing invalid type
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule = new RegisterCareGiverRequest.WorkingScheduleRequest();
-        schedule.setDayOfWeek(DayOfWeek.MONDAY);
-        schedule.setStartTime(LocalTime.of(8, 0));
-        schedule.setEndTime(LocalTime.of(16, 0));
-        schedules.add(schedule);
-
         careGiverRequest = new RegisterCareGiverRequest();
         careGiverRequest.setEmail("caregiver@example.com");
         careGiverRequest.setPassword("password");
@@ -69,7 +61,6 @@ class PacillianFactoryTest {
         careGiverRequest.setPhoneNumber("089876543210");
         careGiverRequest.setSpeciality("General");
         careGiverRequest.setWorkAddress("Test Hospital");
-        careGiverRequest.setWorkingSchedules(schedules);
     }
 
     @Test

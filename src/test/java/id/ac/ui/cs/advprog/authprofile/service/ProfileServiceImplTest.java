@@ -7,7 +7,6 @@ import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
@@ -28,7 +27,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.lang.reflect.Method;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.*;
@@ -76,7 +74,6 @@ class ProfileServiceImplTest {
     private CareGiver careGiver2;
     private UpdateProfileRequest updateRequest;
     private List<CareGiver> careGivers;
-    private WorkingSchedule workingSchedule;
 
     @BeforeEach
     void setUp() {
@@ -122,18 +119,6 @@ class ProfileServiceImplTest {
         doctorRoles.add(doctorRole);
         careGiver.setRoles(doctorRoles);
 
-        // Add working schedule
-        workingSchedule = new WorkingSchedule();
-        workingSchedule.setId(1L);
-        workingSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        workingSchedule.setStartTime(LocalTime.of(9, 0));
-        workingSchedule.setEndTime(LocalTime.of(17, 0));
-        workingSchedule.setAvailable(true);
-        workingSchedule.setCareGiver(careGiver);
-
-        List<WorkingSchedule> schedules = new ArrayList<>();
-        schedules.add(workingSchedule);
-        careGiver.setWorkingSchedules(schedules);
 
         // Create a second caregiver for testing multiple results
         careGiver2 = new CareGiver();
@@ -147,7 +132,6 @@ class ProfileServiceImplTest {
         careGiver2.setWorkAddress("City Hospital");
         careGiver2.setAverageRating(4.8);
         careGiver2.setRoles(doctorRoles);
-        careGiver2.setWorkingSchedules(new ArrayList<>());
 
         careGivers = new ArrayList<>();
         careGivers.add(careGiver);
@@ -487,20 +471,14 @@ class ProfileServiceImplTest {
         assertThat(firstResponse.getNik()).isNull();
         assertThat(firstResponse.getAddress()).isNull();
 
-        // Verify working schedules
-        assertThat(firstResponse.getWorkingSchedules()).hasSize(1);
-        assertThat(firstResponse.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        assertThat(firstResponse.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(9, 0));
-        assertThat(firstResponse.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(17, 0));
-        assertThat(firstResponse.getWorkingSchedules().get(0).isAvailable()).isEqualTo(true);
+
 
         // Verify second caregiver response
         ProfileResponse secondResponse = responses.get(1);
         assertThat(secondResponse.getId()).isEqualTo(careGiver2.getId());
         assertThat(secondResponse.getName()).isEqualTo(careGiver2.getName());
         assertThat(secondResponse.getEmail()).isEqualTo(careGiver2.getEmail());
-        assertThat(secondResponse.getWorkingSchedules()).isNotNull();
-        assertThat(secondResponse.getWorkingSchedules()).isEmpty();
+
 
         verify(careGiverRepository).findAll();
     }
@@ -598,7 +576,6 @@ class ProfileServiceImplTest {
         careGiverWithNullSchedules.setId(5L);
         careGiverWithNullSchedules.setEmail("nullschedules@example.com");
         careGiverWithNullSchedules.setName("Dr. Null");
-        careGiverWithNullSchedules.setWorkingSchedules(null); // Explicitly set to null
 
         List<CareGiver> careGiversWithNull = Arrays.asList(careGiverWithNullSchedules);
         when(careGiverRepository.findAll()).thenReturn(careGiversWithNull);
@@ -608,8 +585,7 @@ class ProfileServiceImplTest {
 
         // then
         assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getWorkingSchedules()).isNotNull();
-        assertThat(responses.get(0).getWorkingSchedules()).isEmpty();
+
 
         verify(careGiverRepository).findAll();
     }
@@ -636,8 +612,7 @@ class ProfileServiceImplTest {
         assertThat(response.getNik()).isNull();
         assertThat(response.getAddress()).isNull();
 
-        // Verify working schedules
-        assertThat(response.getWorkingSchedules()).hasSize(1);
+
 
         verify(careGiverRepository).findById(caregiverId);
     }
@@ -672,132 +647,15 @@ class ProfileServiceImplTest {
         verify(careGiverRepository).findById(userId);
     }
 
-    @Test
-    void searchCareGiversLite_BySchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
 
-        when(careGiverRepository.findByAvailableDayAndTime(dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
 
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, time);
 
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-        assertThat(responses.get(0).getName()).isEqualTo(careGiver.getName());
 
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByAvailableDayAndTime(dayOfWeek, time);
-    }
 
-    @Test
-    void searchCareGiversLite_ByNameAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String name = "test";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
 
-        when(careGiverRepository.findByNameAndAvailableDayAndTime(name, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
 
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, null, dayOfWeek, time);
 
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
 
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByNameAndAvailableDayAndTime(name, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_BySpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String speciality = "general";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, speciality, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_ByNameSpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String name = "test";
-        String speciality = "general";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, speciality, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_ByDayOnly_ShouldReturnMatchingCareGivers() {
-        // given
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-
-        when(careGiverRepository.findByAvailableDayOfWeek(dayOfWeek))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, null);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByAvailableDayOfWeek(dayOfWeek);
-    }
-
-    @Test
-    void searchCareGiversLite_WithoutScheduleParams_ShouldDelegateToOriginalMethod() {
-        // given
-        String name = "test";
-        String speciality = "general";
-
-        // Create a spy of the service implementation
-        ProfileServiceImpl spyService = spy(profileServiceImpl);
-
-        // Mock the repository since we're using a spy
-        when(careGiverRepository.findByNameAndSpeciality(name, speciality))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when - call the 4-param version with null schedule params
-        List<ProfileResponse> responses = spyService.searchCareGiversLite(name, speciality, null, null);
-
-        // then
-        assertThat(responses).hasSize(1);
-
-        // Verify the delegation happened
-        verify(spyService).searchCareGiversLite(name, speciality);
-    }
 
     @Test
     void updateCurrentUserProfile_NoEmailChange_ForPacillian() {

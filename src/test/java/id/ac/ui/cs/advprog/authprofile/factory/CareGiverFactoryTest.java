@@ -52,13 +52,7 @@ class CareGiverFactoryTest {
         pacillianRequest.setPhoneNumber("081234567890");
         pacillianRequest.setMedicalHistory("No significant history");
 
-        // Set up working schedule for caregiver
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule = new RegisterCareGiverRequest.WorkingScheduleRequest();
-        schedule.setDayOfWeek(DayOfWeek.MONDAY);
-        schedule.setStartTime(LocalTime.of(8, 0));
-        schedule.setEndTime(LocalTime.of(16, 0));
-        schedules.add(schedule);
+
 
         // Set up caregiver request
         careGiverRequest = new RegisterCareGiverRequest();
@@ -70,7 +64,6 @@ class CareGiverFactoryTest {
         careGiverRequest.setPhoneNumber("089876543210");
         careGiverRequest.setSpeciality("General");
         careGiverRequest.setWorkAddress("Test Hospital");
-        careGiverRequest.setWorkingSchedules(schedules);
     }
 
     @Test
@@ -101,31 +94,9 @@ class CareGiverFactoryTest {
         // Verify role assignment
         assertThat(careGiver.getRoles()).hasSize(1);
         assertThat(careGiver.getRoles().iterator().next().getName()).isEqualTo(Role.ERole.ROLE_CAREGIVER);
-
-        // Verify working schedules
-        assertThat(careGiver.getWorkingSchedules()).hasSize(1);
-        assertThat(careGiver.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        assertThat(careGiver.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(8, 0));
-        assertThat(careGiver.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(16, 0));
     }
 
-    @Test
-    void createUser_WithoutWorkingSchedules_ShouldCreateCareGiverWithoutSchedules() {
-        // given
-        when(roleRepository.findByName(Role.ERole.ROLE_CAREGIVER)).thenReturn(Optional.of(careGiverRole));
-        careGiverRequest.setWorkingSchedules(null);
-        String encodedPassword = "encoded_password";
 
-        // when
-        User user = careGiverFactory.createUser(careGiverRequest, encodedPassword);
-
-        // then
-        assertThat(user).isNotNull().isInstanceOf(CareGiver.class);
-        CareGiver careGiver = (CareGiver) user;
-
-        // Verify that no working schedules were added
-        assertThat(careGiver.getWorkingSchedules()).isEmpty();
-    }
 
     @Test
     void createUser_WithInvalidRequestType_ShouldThrowException() {

@@ -27,7 +27,6 @@ class RegisterCareGiverRequestTest {
         assertThat(request.getPhoneNumber()).isNull();
         assertThat(request.getSpeciality()).isNull();
         assertThat(request.getWorkAddress()).isNull();
-        assertThat(request.getWorkingSchedules()).isNull();
     }
 
     @Test
@@ -36,17 +35,8 @@ class RegisterCareGiverRequestTest {
         String speciality = "Cardiology";
         String workAddress = "Heart Hospital";
 
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY,
-                        LocalTime.of(8, 0),
-                        LocalTime.of(16, 0)
-                );
-        schedules.add(schedule);
-
         // when
-        RegisterCareGiverRequest request = new RegisterCareGiverRequest(speciality, workAddress, schedules);
+        RegisterCareGiverRequest request = new RegisterCareGiverRequest(speciality, workAddress);
         request.setEmail("doctor@example.com");
         request.setPassword("password123");
         request.setName("Dr. Smith");
@@ -64,11 +54,7 @@ class RegisterCareGiverRequestTest {
         assertThat(request.getPhoneNumber()).isEqualTo("0812345678");
         assertThat(request.getSpeciality()).isEqualTo(speciality);
         assertThat(request.getWorkAddress()).isEqualTo(workAddress);
-        assertThat(request.getWorkingSchedules()).isEqualTo(schedules);
-        assertThat(request.getWorkingSchedules()).hasSize(1);
-        assertThat(request.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        assertThat(request.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(8, 0));
-        assertThat(request.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(16, 0));
+
     }
 
     @Test
@@ -84,14 +70,7 @@ class RegisterCareGiverRequestTest {
         String speciality = "Cardiology";
         String workAddress = "Heart Hospital";
 
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY,
-                        LocalTime.of(8, 0),
-                        LocalTime.of(16, 0)
-                );
-        schedules.add(schedule);
+
 
         // when
         request.setEmail(email);
@@ -102,7 +81,6 @@ class RegisterCareGiverRequestTest {
         request.setPhoneNumber(phoneNumber);
         request.setSpeciality(speciality);
         request.setWorkAddress(workAddress);
-        request.setWorkingSchedules(schedules);
 
         // then
         assertThat(request.getEmail()).isEqualTo(email);
@@ -113,7 +91,6 @@ class RegisterCareGiverRequestTest {
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
         assertThat(request.getSpeciality()).isEqualTo(speciality);
         assertThat(request.getWorkAddress()).isEqualTo(workAddress);
-        assertThat(request.getWorkingSchedules()).isEqualTo(schedules);
     }
 
     @Test
@@ -128,7 +105,6 @@ class RegisterCareGiverRequestTest {
                 .phoneNumber("0812345678")
                 .speciality("Cardiology")
                 .workAddress("Heart Hospital")
-                .workingSchedules(null)
                 .build();
 
         RegisterCareGiverRequest request2 = RegisterCareGiverRequest.builder()
@@ -140,7 +116,6 @@ class RegisterCareGiverRequestTest {
                 .phoneNumber("0812345678")
                 .speciality("Cardiology")
                 .workAddress("Heart Hospital")
-                .workingSchedules(null)
                 .build();
 
         RegisterCareGiverRequest request3 = RegisterCareGiverRequest.builder()
@@ -152,7 +127,6 @@ class RegisterCareGiverRequestTest {
                 .phoneNumber("0812345678")
                 .speciality("Cardiology")
                 .workAddress("Heart Hospital")
-                .workingSchedules(null)
                 .build();
 
         // then
@@ -174,7 +148,6 @@ class RegisterCareGiverRequestTest {
                 .phoneNumber("0812345678")
                 .speciality("Cardiology")
                 .workAddress("Heart Hospital")
-                .workingSchedules(null)
                 .build();
 
         // when
@@ -203,14 +176,7 @@ class RegisterCareGiverRequestTest {
         String speciality = "Cardiology";
         String workAddress = "Heart Hospital";
 
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY,
-                        LocalTime.of(8, 0),
-                        LocalTime.of(16, 0)
-                );
-        schedules.add(schedule);
+
 
         // when
         RegisterCareGiverRequest request = RegisterCareGiverRequest.builder()
@@ -222,7 +188,6 @@ class RegisterCareGiverRequestTest {
                 .phoneNumber(phoneNumber)
                 .speciality(speciality)
                 .workAddress(workAddress)
-                .workingSchedules(schedules)
                 .build();
 
         // then
@@ -234,99 +199,10 @@ class RegisterCareGiverRequestTest {
         assertThat(request.getPhoneNumber()).isEqualTo(phoneNumber);
         assertThat(request.getSpeciality()).isEqualTo(speciality);
         assertThat(request.getWorkAddress()).isEqualTo(workAddress);
-        assertThat(request.getWorkingSchedules()).isEqualTo(schedules);
     }
 
-    @Test
-    void testWorkingScheduleRequestNoArgsConstructor() {
-        // when
-        RegisterCareGiverRequest.WorkingScheduleRequest request =
-                new RegisterCareGiverRequest.WorkingScheduleRequest();
 
-        // then
-        assertThat(request).isNotNull();
-        assertThat(request.getDayOfWeek()).isNull();
-        assertThat(request.getStartTime()).isNull();
-        assertThat(request.getEndTime()).isNull();
-    }
 
-    @Test
-    void testWorkingScheduleRequestAllArgsConstructor() {
-        // given
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime startTime = LocalTime.of(8, 0);
-        LocalTime endTime = LocalTime.of(16, 0);
 
-        // when
-        RegisterCareGiverRequest.WorkingScheduleRequest request =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(dayOfWeek, startTime, endTime);
 
-        // then
-        assertThat(request).isNotNull();
-        assertThat(request.getDayOfWeek()).isEqualTo(dayOfWeek);
-        assertThat(request.getStartTime()).isEqualTo(startTime);
-        assertThat(request.getEndTime()).isEqualTo(endTime);
-    }
-
-    @Test
-    void testWorkingScheduleRequestSettersAndGetters() {
-        // given
-        RegisterCareGiverRequest.WorkingScheduleRequest request =
-                new RegisterCareGiverRequest.WorkingScheduleRequest();
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime startTime = LocalTime.of(8, 0);
-        LocalTime endTime = LocalTime.of(16, 0);
-
-        // when
-        request.setDayOfWeek(dayOfWeek);
-        request.setStartTime(startTime);
-        request.setEndTime(endTime);
-
-        // then
-        assertThat(request.getDayOfWeek()).isEqualTo(dayOfWeek);
-        assertThat(request.getStartTime()).isEqualTo(startTime);
-        assertThat(request.getEndTime()).isEqualTo(endTime);
-    }
-
-    @Test
-    void testWorkingScheduleRequestEqualsAndHashCode() {
-        // given
-        RegisterCareGiverRequest.WorkingScheduleRequest request1 =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(16, 0)
-                );
-
-        RegisterCareGiverRequest.WorkingScheduleRequest request2 =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(16, 0)
-                );
-
-        RegisterCareGiverRequest.WorkingScheduleRequest request3 =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.TUESDAY, LocalTime.of(8, 0), LocalTime.of(16, 0)
-                );
-
-        // then
-        assertThat(request1).isEqualTo(request2);
-        assertThat(request1).isNotEqualTo(request3);
-        assertThat(request1.hashCode()).isEqualTo(request2.hashCode());
-        assertThat(request1.hashCode()).isNotEqualTo(request3.hashCode());
-    }
-
-    @Test
-    void testWorkingScheduleRequestToString() {
-        // given
-        RegisterCareGiverRequest.WorkingScheduleRequest request =
-                new RegisterCareGiverRequest.WorkingScheduleRequest(
-                        DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(16, 0)
-                );
-
-        // when
-        String toString = request.toString();
-
-        // then
-        assertThat(toString).contains("MONDAY");
-        assertThat(toString).contains("08:00");
-        assertThat(toString).contains("16:00");
-    }
 }

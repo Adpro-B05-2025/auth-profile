@@ -55,13 +55,6 @@ class UserFactoryProviderTest {
         pacillianRequest.setPhoneNumber("081234567890");
         pacillianRequest.setMedicalHistory("No significant history");
 
-        // Set up working schedule for caregiver
-        List<RegisterCareGiverRequest.WorkingScheduleRequest> schedules = new ArrayList<>();
-        RegisterCareGiverRequest.WorkingScheduleRequest schedule = new RegisterCareGiverRequest.WorkingScheduleRequest();
-        schedule.setDayOfWeek(DayOfWeek.MONDAY);
-        schedule.setStartTime(LocalTime.of(8, 0));
-        schedule.setEndTime(LocalTime.of(16, 0));
-        schedules.add(schedule);
 
         // Set up caregiver request
         careGiverRequest = new RegisterCareGiverRequest();
@@ -73,7 +66,6 @@ class UserFactoryProviderTest {
         careGiverRequest.setPhoneNumber("089876543210");
         careGiverRequest.setSpeciality("General");
         careGiverRequest.setWorkAddress("Test Hospital");
-        careGiverRequest.setWorkingSchedules(schedules);
     }
 
     @Test
