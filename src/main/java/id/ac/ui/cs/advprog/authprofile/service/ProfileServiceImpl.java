@@ -254,4 +254,15 @@ public class ProfileServiceImpl implements IProfileService {
 
         return createLiteProfileResponse(careGiver);
     }
+
+    /**
+     * Get user name by ID (for service-to-service calls)
+     */
+    public String getUserName(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+        return user.getName();
+    }
+
+
 }
