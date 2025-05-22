@@ -147,4 +147,22 @@ class CareGiverAuthorizationStrategyTest {
         assertTrue(result, "CareGiver should be able to view caregiver profiles through VIEW_CAREGIVER action");
     }
 
+    @Test
+    void whenCareGiverViewsUsername_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, null, "VIEW_USERNAME");
+        assertTrue(result, "CareGiver should be able to view usernames");
+    }
+
+    @Test
+    void whenCareGiverViewsUsernameWithResourceId_thenReturnTrue() {
+        boolean result = strategy.isAuthorized(careGiver, 1L, "VIEW_USERNAME");
+        assertTrue(result, "CareGiver should be able to view usernames regardless of resourceId");
+    }
+
+    @Test
+    void whenNonCareGiverViewsUsername_thenReturnFalse() {
+        boolean result = strategy.isAuthorized(nonCareGiver, null, "VIEW_USERNAME");
+        assertFalse(result, "Non-CareGiver users should not be authorized for VIEW_USERNAME");
+    }
+
 }

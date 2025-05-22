@@ -926,5 +926,64 @@ class ProfileServiceImplTest {
         verify(userRepository, times(2)).findById(user.getId());
     }
 
+    @Test
+    void getUserName_ShouldReturnUserName() {
+        // given
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        // when
+        String userName = profileServiceImpl.getUserName(1L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Test User");
+
+        verify(userRepository).findById(1L);
+    }
+
+    @Test
+    void getUserName_WithNonExistentUser_ShouldThrowException() {
+        // given
+        Long nonExistentUserId = 999L;
+        when(userRepository.findById(nonExistentUserId)).thenReturn(Optional.empty());
+
+        // when/then
+        assertThatThrownBy(() -> profileServiceImpl.getUserName(nonExistentUserId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("User not found with id: " + nonExistentUserId);
+
+        verify(userRepository).findById(nonExistentUserId);
+    }
+
+    @Test
+    void getUserName_WithPacillian_ShouldReturnPacillianName() {
+        // given
+        when(userRepository.findById(2L)).thenReturn(Optional.of(pacillian));
+
+        // when
+        String userName = profileServiceImpl.getUserName(2L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Test Pacillian");
+
+        verify(userRepository).findById(2L);
+    }
+
+    @Test
+    void getUserName_WithCareGiver_ShouldReturnCareGiverName() {
+        // given
+        when(userRepository.findById(3L)).thenReturn(Optional.of(careGiver));
+
+        // when
+        String userName = profileServiceImpl.getUserName(3L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Dr. Test");
+
+        verify(userRepository).findById(3L);
+    }
+
 
 }

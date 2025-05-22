@@ -105,4 +105,31 @@ public class ProfileController {
         ProfileResponse profile = profileService.getCareGiverProfileLite(id);
         return ResponseEntity.ok(profile);
     }
+
+
+    @GetMapping("/user/{userId}/name")
+    @RequiresAuthorization(
+            action = "VIEW_USERNAME"
+    )
+    public ResponseEntity<Map<String, Object>> getUserName(@PathVariable Long userId) {
+
+        try {
+            String userName = profileService.getUserName(userId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", userId);
+            response.put("name", userName);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "User not found");
+            error.put("id", userId);
+            error.put("name", "User " + userId); // Fallback name
+
+            return ResponseEntity.status(404).body(error);
+        }
+    }
 }

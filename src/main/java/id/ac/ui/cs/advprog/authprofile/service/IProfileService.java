@@ -66,4 +66,11 @@ public interface IProfileService {
      * @return the lite profile response with sensitive fields hidden
      */
     ProfileResponse getCareGiverProfileLite(Long caregiverId);
+
+    /**
+     * Get user name by ID (for service-to-service calls)
+     * @param userId the user ID
+     * @return the user's name
+     */
+    String getUserName(Long userId);
 }

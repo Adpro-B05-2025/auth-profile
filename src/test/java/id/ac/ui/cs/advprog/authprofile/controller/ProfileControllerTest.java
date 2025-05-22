@@ -474,4 +474,116 @@ class ProfileControllerTest {
     }
 
 
+
+    @Test
+    @WithMockUser(roles = "CAREGIVER")
+    void getUserName_AsCareGiver_ShouldReturnUserNameAndId() throws Exception {
+        // given
+        Long userId = 2L;
+        String userName = "Dr. Smith";
+        when(profileService.getUserName(userId)).thenReturn(userName);
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value(userName));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithNonExistentUser_ShouldReturnNotFoundWithFallback() throws Exception {
+        // given
+        Long nonExistentUserId = 999L;
+        when(profileService.getUserName(nonExistentUserId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + nonExistentUserId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", nonExistentUserId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(nonExistentUserId))
+                .andExpect(jsonPath("$.name").value("User " + nonExistentUserId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithServiceException_ShouldReturnNotFoundWithFallback() throws Exception {
+        // given
+        Long userId = 1L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new RuntimeException("Database connection error"));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithPacillianUser_ShouldReturnCorrectName() throws Exception {
+        // given
+        Long pacillianId = 3L;
+        String pacillianName = "John Patient";
+        when(profileService.getUserName(pacillianId)).thenReturn(pacillianName);
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", pacillianId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(pacillianId))
+                .andExpect(jsonPath("$.name").value(pacillianName));
+    }
+
+    @Test
+    @WithMockUser(roles = "CAREGIVER")
+    void getUserName_WithCareGiverUser_ShouldReturnCorrectName() throws Exception {
+        // given
+        Long caregiverId = 4L;
+        String caregiverName = "Dr. Johnson";
+        when(profileService.getUserName(caregiverId)).thenReturn(caregiverName);
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", caregiverId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(caregiverId))
+                .andExpect(jsonPath("$.name").value(caregiverName));
+    }
+
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithZeroUserId_ShouldHandleGracefully() throws Exception {
+        // given
+        Long userId = 0L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + userId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithNegativeUserId_ShouldHandleGracefully() throws Exception {
+        // given
+        Long userId = -1L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + userId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
+
+
 }
