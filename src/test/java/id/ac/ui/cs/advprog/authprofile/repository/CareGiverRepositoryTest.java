@@ -8,10 +8,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,7 +29,6 @@ class CareGiverRepositoryTest {
 
     @Autowired
     private CareGiverRepository careGiverRepository;
-
 
     @BeforeEach
     void setup() {
@@ -74,35 +75,9 @@ class CareGiverRepositoryTest {
     @Test
     void findByNameContainingIgnoreCase_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("smith@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Smith");
-        careGiver1.setNik("1111111111111111");
-        careGiver1.setAddress("Address 1");
-        careGiver1.setPhoneNumber("081111111111");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 1");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("johnson@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Johnson");
-        careGiver2.setNik("2222222222222222");
-        careGiver2.setAddress("Address 2");
-        careGiver2.setPhoneNumber("082222222222");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 2");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("smithson@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Smithson");
-        careGiver3.setNik("3333333333333333");
-        careGiver3.setAddress("Address 3");
-        careGiver3.setPhoneNumber("083333333333");
-        careGiver3.setSpeciality("Dermatology");
-        careGiver3.setWorkAddress("Hospital 3");
+        CareGiver careGiver1 = createCareGiver("smith@example.com", "Dr. Smith", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("johnson@example.com", "Dr. Johnson", "2222222222222222", "Neurology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("smithson@example.com", "Dr. Smithson", "3333333333333333", "Dermatology", "Hospital 3");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -128,35 +103,9 @@ class CareGiverRepositoryTest {
     @Test
     void findBySpecialityContainingIgnoreCase_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("cardio1@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Cardio One");
-        careGiver1.setNik("4444444444444444");
-        careGiver1.setAddress("Address 4");
-        careGiver1.setPhoneNumber("084444444444");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 4");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("neuro@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Neuro");
-        careGiver2.setNik("5555555555555555");
-        careGiver2.setAddress("Address 5");
-        careGiver2.setPhoneNumber("085555555555");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 5");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("cardio2@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Cardio Two");
-        careGiver3.setNik("6666666666666666");
-        careGiver3.setAddress("Address 6");
-        careGiver3.setPhoneNumber("086666666666");
-        careGiver3.setSpeciality("Cardiology");
-        careGiver3.setWorkAddress("Hospital 6");
+        CareGiver careGiver1 = createCareGiver("cardio1@example.com", "Dr. Cardio One", "4444444444444444", "Cardiology", "Hospital 4");
+        CareGiver careGiver2 = createCareGiver("neuro@example.com", "Dr. Neuro", "5555555555555555", "Neurology", "Hospital 5");
+        CareGiver careGiver3 = createCareGiver("cardio2@example.com", "Dr. Cardio Two", "6666666666666666", "Cardiology", "Hospital 6");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -186,35 +135,9 @@ class CareGiverRepositoryTest {
     @Test
     void findByNameAndSpeciality_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("smith.cardio@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Smith");
-        careGiver1.setNik("7777777777777777");
-        careGiver1.setAddress("Address 7");
-        careGiver1.setPhoneNumber("087777777777");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 7");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("smith.neuro@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Smith");
-        careGiver2.setNik("8888888888888888");
-        careGiver2.setAddress("Address 8");
-        careGiver2.setPhoneNumber("088888888888");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 8");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("johnson.cardio@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Johnson");
-        careGiver3.setNik("9999999999999999");
-        careGiver3.setAddress("Address 9");
-        careGiver3.setPhoneNumber("089999999999");
-        careGiver3.setSpeciality("Cardiology");
-        careGiver3.setWorkAddress("Hospital 9");
+        CareGiver careGiver1 = createCareGiver("smith.cardio@example.com", "Dr. Smith", "7777777777777777", "Cardiology", "Hospital 7");
+        CareGiver careGiver2 = createCareGiver("smith.neuro@example.com", "Dr. Smith", "8888888888888888", "Neurology", "Hospital 8");
+        CareGiver careGiver3 = createCareGiver("johnson.cardio@example.com", "Dr. Johnson", "9999999999999999", "Cardiology", "Hospital 9");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -238,8 +161,267 @@ class CareGiverRepositoryTest {
 
         assertThat(foundByNonexistent).isEmpty();
     }
+
+    @Test
+    void findCareGiversWithFilters_ShouldReturnFilteredResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+        CareGiver careGiver4 = createCareGiverWithRating("alice2@example.com", "Alice", "4444444444444444", "Dermatology", "Hospital 4", 4.0);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.persist(careGiver4);
+        entityManager.flush();
+
+        // when & then
+        // Test case 1: both name and speciality provided
+        List<CareGiver> result1 = careGiverRepository.findCareGiversWithFilters("Ali", "Cardio");
+        assertThat(result1).hasSize(1);
+        assertThat(result1.get(0).getEmail()).isEqualTo("alice@example.com");
+
+        // Test case 2: name is null, speciality provided
+        List<CareGiver> result2 = careGiverRepository.findCareGiversWithFilters(null, "Cardiology");
+        assertThat(result2).hasSize(2);
+        assertThat(result2).extracting(CareGiver::getEmail)
+                .containsExactlyInAnyOrder("alice@example.com", "charlie@example.com");
+
+        // Test case 3: speciality is null, name provided
+        List<CareGiver> result3 = careGiverRepository.findCareGiversWithFilters("Bob", null);
+        assertThat(result3).hasSize(1);
+        assertThat(result3.get(0).getEmail()).isEqualTo("bob@example.com");
+
+        // Test case 4: both null
+        List<CareGiver> result4 = careGiverRepository.findCareGiversWithFilters(null, null);
+        assertThat(result4).hasSize(4);
+    }
+
+    // NEW TESTS FOR PAGINATED METHODS
+
+    @Test
+    void findByNameContainingIgnoreCaseWithPagination_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("alice2@example.com", "Alice Smith", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("bob@example.com", "Bob", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by name
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCase("Alice", pageable);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice2@example.com", "alice@example.com");
+    }
+
+    @Test
+    void findBySpecialityContainingIgnoreCaseWithPagination_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by speciality
+        Page<CareGiver> result = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageable);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice@example.com", "charlie@example.com");
+    }
+
+    @Test
+    void findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice.cardio@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("alice.neuro@example.com", "Alice", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("bob.cardio@example.com", "Bob", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by both name and speciality
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                "Alice", "Cardiology", pageable);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).getEmail()).isEqualTo("alice.cardio@example.com");
+    }
+
+    @Test
+    void findNameSuggestions_ShouldReturnDistinctNamesContainingPrefix() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("alice2@example.com", "alice", "2222222222222222", "Cardiology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("bob@example.com", "Bob", "3333333333333333", "Neurology", "Hospital 3");
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        List<String> suggestionsA = careGiverRepository.findNameSuggestions("A");
+        assertThat(suggestionsA).containsExactlyInAnyOrder("Alice", "alice");
+
+        List<String> suggestionsLowerA = careGiverRepository.findNameSuggestions("a");
+        assertThat(suggestionsLowerA).containsExactlyInAnyOrder("Alice", "alice");
+
+        List<String> suggestionsB = careGiverRepository.findNameSuggestions("B");
+        assertThat(suggestionsB).containsExactly("Bob");
+
+        List<String> suggestionsZ = careGiverRepository.findNameSuggestions("Z");
+        assertThat(suggestionsZ).isEmpty();
+    }
+
+    @Test
+    void findSpecialitySuggestions_ShouldReturnDistinctSpecialitiesContainingQuery() {
+        // given
+        CareGiver careGiver1 = createCareGiver("cardio@example.com", "Dr. Cardio", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("neuro@example.com", "Dr. Neuro", "2222222222222222", "Neurology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("cardio2@example.com", "Dr. Cardio2", "3333333333333333", "cardio", "Hospital 3");
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        List<String> suggestionsCard = careGiverRepository.findSpecialitySuggestions("card");
+        assertThat(suggestionsCard).containsExactlyInAnyOrder("Cardiology", "cardio");
+
+        List<String> suggestionsNeuro = careGiverRepository.findSpecialitySuggestions("neuro");
+        assertThat(suggestionsNeuro).containsExactly("Neurology");
+
+        List<String> suggestionsLogy = careGiverRepository.findSpecialitySuggestions("logy");
+        assertThat(suggestionsLogy).containsExactlyInAnyOrder("Cardiology", "Neurology");
+
+        List<String> suggestionsNone = careGiverRepository.findSpecialitySuggestions("nonexistent");
+        assertThat(suggestionsNone).isEmpty();
+    }
+
+    // ADDITIONAL TESTS FOR EDGE CASES
+
+    @Test
+    void findCareGiversWithFilters_WithEmptyResults_ShouldReturnEmptyList() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        entityManager.persistAndFlush(careGiver1);
+
+        // when
+        List<CareGiver> result = careGiverRepository.findCareGiversWithFilters("NonExistent", "NonExistent");
+
+        // then
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findByNameContainingIgnoreCase_WithPagination_ShouldHandleLargePageSize() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2");
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.flush();
+
+        // when
+        Pageable pageable = PageRequest.of(0, 100);
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCase("", pageable);
+
+        // then
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+    }
+
+    @Test
+    void findBySpecialityContainingIgnoreCase_WithDifferentSortOrders_ShouldReturnSortedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Cardiology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        // Test sorting by rating descending
+        Pageable pageableRatingDesc = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "averageRating"));
+        Page<CareGiver> resultRatingDesc = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageableRatingDesc);
+        assertThat(resultRatingDesc.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("bob@example.com", "alice@example.com", "charlie@example.com");
+
+        // Test sorting by name ascending
+        Pageable pageableNameAsc = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "name"));
+        Page<CareGiver> resultNameAsc = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageableNameAsc);
+        assertThat(resultNameAsc.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice@example.com", "bob@example.com", "charlie@example.com");
+    }
+
+    @Test
+    void findCareGiversWithFilters_WithCaseInsensitiveFilters_ShouldReturnMatchingResults() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("bob@example.com", "BOB", "2222222222222222", "cardiology", "Hospital 2");
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.flush();
+
+        // when & then
+        // Test case insensitive name filter
+        List<CareGiver> resultName = careGiverRepository.findCareGiversWithFilters("alice", null);
+        assertThat(resultName).hasSize(1);
+        assertThat(resultName.get(0).getEmail()).isEqualTo("alice@example.com");
+
+        // Test case insensitive speciality filter
+        List<CareGiver> resultSpeciality = careGiverRepository.findCareGiversWithFilters(null, "CARDIOLOGY");
+        assertThat(resultSpeciality).hasSize(2);
+    }
+
+    // Helper methods
+    private CareGiver createCareGiver(String email, String name, String nik, String speciality, String workAddress) {
+        CareGiver careGiver = new CareGiver();
+        careGiver.setEmail(email);
+        careGiver.setPassword("password");
+        careGiver.setName(name);
+        careGiver.setNik(nik);
+        careGiver.setAddress("Address for " + name);
+        careGiver.setPhoneNumber("08" + nik.substring(0, 10));
+        careGiver.setSpeciality(speciality);
+        careGiver.setWorkAddress(workAddress);
+        return careGiver;
+    }
+
+    private CareGiver createCareGiverWithRating(String email, String name, String nik, String speciality, String workAddress, Double rating) {
+        CareGiver careGiver = createCareGiver(email, name, nik, speciality, workAddress);
+        careGiver.setAverageRating(rating);
+        careGiver.setRatingCount(10); // Default rating count
+        return careGiver;
+    }
 }
-
-
-
-
