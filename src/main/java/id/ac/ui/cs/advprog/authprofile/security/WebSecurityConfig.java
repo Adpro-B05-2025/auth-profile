@@ -63,7 +63,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // Add this line
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/caregiver/all").permitAll()
-                        .requestMatchers("/api/caregiver/search").permitAll()
+                        .requestMatchers("/api/caregiver/search**").permitAll()
                         .anyRequest().authenticated()
                 );
 
