@@ -3,17 +3,22 @@ package id.ac.ui.cs.advprog.authprofile.service;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.*;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
 public class SearchCareGiverService {
 
+    private static final Logger logger = LoggerFactory.getLogger(SearchCareGiverService.class);
     private final CareGiverRepository careGiverRepository;
 
     @Autowired
@@ -22,64 +27,42 @@ public class SearchCareGiverService {
     }
 
     /**
-     * Enhanced search with better performance
+     * ASYNC: Main search operations for high load handling
      */
-    public List<ProfileResponse> searchCareGiversOptimized(String name, String speciality) {
-        // Use the optimized repository method
+    @Async("searchTaskExecutor")
+    public CompletableFuture<List<ProfileResponse>> searchCareGiversOptimized(String name, String speciality) {
+        logger.debug("Starting async search - name: {}, speciality: {}", name, speciality);
+
         List<CareGiver> careGivers = careGiverRepository.findCareGiversWithFilters(
                 (name != null && !name.trim().isEmpty()) ? name.trim() : null,
                 (speciality != null && !speciality.trim().isEmpty()) ? speciality.trim() : null
         );
 
-        return careGivers.stream()
+        List<ProfileResponse> results = careGivers.stream()
                 .map(this::createLiteProfileResponse)
                 .collect(Collectors.toList());
+
+        logger.debug("Async search completed with {} results", results.size());
+        return CompletableFuture.completedFuture(results);
     }
 
-    public List<ProfileResponse> getAllCareGiversLite() {
-        List<CareGiver> careGivers = careGiverRepository.findAll();
-        return careGivers.stream()
-                .map(this::createLiteProfileResponse)
-                .collect(Collectors.toList());
-    }
+    @Async("searchTaskExecutor")
+    public CompletableFuture<Page<ProfileResponse>> searchCareGiversPaginated(
+            String name, String speciality, int page, int size) {
 
-    /**
-     * Get autocomplete suggestions for names
-     */
-    @Cacheable(value = "nameSuggestions", key = "#prefix")
-    public List<String> getNameSuggestions(String prefix) {
-        if (prefix == null || prefix.trim().length() < 2) {
-            return List.of(); // Don't suggest for very short inputs
-        }
-        return careGiverRepository.findNameSuggestions(prefix.trim());
-    }
+        logger.debug("Starting async paginated search");
 
-    /**
-     * Get autocomplete suggestions for specialities
-     */
-    @Cacheable(value = "specialitySuggestions", key = "#query")
-    public List<String> getSpecialitySuggestions(String query) {
-        if (query == null || query.trim().length() < 2) {
-            return List.of();
-        }
-        return careGiverRepository.findSpecialitySuggestions(query.trim());
-    }
+        // Validate parameters
+        int validPage = Math.max(0, page);
+        int validSize = (size <= 0 || size > 100) ? 10 : size;
 
-    public Page<ProfileResponse> searchCareGiversPaginated(String name, String speciality, int page, int size) {
-        // Validate pagination parameters
-        if (page < 0) page = 0;
-        if (size <= 0 || size > 100) size = 10;
-
-        // Create pageable with sorting
-        Pageable pageable = PageRequest.of(page, size,
+        Pageable pageable = PageRequest.of(validPage, validSize,
                 Sort.by(Sort.Direction.DESC, "averageRating")
                         .and(Sort.by(Sort.Direction.ASC, "name")));
 
-        // Clean filter parameters
         String cleanName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
         String cleanSpeciality = (speciality != null && !speciality.trim().isEmpty()) ? speciality.trim() : null;
 
-        // Use appropriate repository method based on filters
         Page<CareGiver> careGiversPage;
         if (cleanName != null && cleanSpeciality != null) {
             careGiversPage = careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
@@ -92,17 +75,54 @@ public class SearchCareGiverService {
             careGiversPage = careGiverRepository.findAll(pageable);
         }
 
-        return careGiversPage.map(this::createLiteProfileResponse);
+        Page<ProfileResponse> results = careGiversPage.map(this::createLiteProfileResponse);
+
+        logger.debug("Async paginated search completed - {} total elements", results.getTotalElements());
+        return CompletableFuture.completedFuture(results);
     }
 
-    public Page<ProfileResponse> searchCareGiversPaginatedWithSort(String name, String speciality,
-                                                                   int page, int size,
-                                                                   String sortBy, String sortDirection) {
-        // Validate pagination parameters
-        if (page < 0) page = 0;
-        if (size <= 0 || size > 100) size = 10;
+    /**
+     * SYNC: Cached autocomplete operations (fast after first call)
+     */
+    @Cacheable(value = "nameSuggestions", key = "#prefix")
+    public List<String> getNameSuggestions(String prefix) {
+        logger.debug("Getting name suggestions for: {}", prefix);
 
-        // Validate sorting parameters
+        if (prefix == null || prefix.trim().length() < 2) {
+            return List.of();
+        }
+
+        List<String> results = careGiverRepository.findNameSuggestions(prefix.trim());
+        logger.debug("Found {} name suggestions", results.size());
+        return results;
+    }
+
+    @Cacheable(value = "specialitySuggestions", key = "#query")
+    public List<String> getSpecialitySuggestions(String query) {
+        logger.debug("Getting speciality suggestions for: {}", query);
+
+        if (query == null || query.trim().length() < 2) {
+            return List.of();
+        }
+
+        List<String> results = careGiverRepository.findSpecialitySuggestions(query.trim());
+        logger.debug("Found {} speciality suggestions", results.size());
+        return results;
+    }
+
+    /**
+     * ASYNC: Advanced search with sorting (heavy operation)
+     */
+    @Async("searchTaskExecutor")
+    public CompletableFuture<Page<ProfileResponse>> searchCareGiversPaginatedWithSort(
+            String name, String speciality, int page, int size, String sortBy, String sortDirection) {
+
+        logger.debug("Starting async advanced search with sorting");
+
+        // Parameter validation and processing (same as before)
+        int validPage = Math.max(0, page);
+        int validSize = (size <= 0 || size > 100) ? 10 : size;
+
         Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
         String[] allowedSortFields = {"name", "speciality", "averageRating", "ratingCount"};
         String validSortBy = "averageRating";
@@ -116,13 +136,11 @@ public class SearchCareGiverService {
             }
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, validSortBy));
+        Pageable pageable = PageRequest.of(validPage, validSize, Sort.by(direction, validSortBy));
 
-        // Clean filter parameters
         String cleanName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
         String cleanSpeciality = (speciality != null && !speciality.trim().isEmpty()) ? speciality.trim() : null;
 
-        // Use appropriate repository method based on filters
         Page<CareGiver> careGiversPage;
         if (cleanName != null && cleanSpeciality != null) {
             careGiversPage = careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
@@ -135,22 +153,31 @@ public class SearchCareGiverService {
             careGiversPage = careGiverRepository.findAll(pageable);
         }
 
-        return careGiversPage.map(this::createLiteProfileResponse);
+        Page<ProfileResponse> results = careGiversPage.map(this::createLiteProfileResponse);
+
+        logger.debug("Async advanced search completed");
+        return CompletableFuture.completedFuture(results);
     }
 
     /**
-     * Get top-rated caregivers with pagination
+     * ASYNC: Get top-rated caregivers with pagination
      */
-    public Page<ProfileResponse> getTopRatedCareGivers(int page, int size) {
-        if (page < 0) page = 0;
-        if (size <= 0 || size > 50) size = 10;
+    @Async("searchTaskExecutor")
+    public CompletableFuture<Page<ProfileResponse>> getTopRatedCareGivers(int page, int size) {
+        logger.debug("Starting async top-rated caregivers search");
 
-        Pageable pageable = PageRequest.of(page, size,
+        int validPage = Math.max(0, page);
+        int validSize = (size <= 0 || size > 50) ? 10 : size;
+
+        Pageable pageable = PageRequest.of(validPage, validSize,
                 Sort.by(Sort.Direction.DESC, "averageRating")
                         .and(Sort.by(Sort.Direction.DESC, "ratingCount")));
 
         Page<CareGiver> careGiversPage = careGiverRepository.findAll(pageable);
-        return careGiversPage.map(this::createLiteProfileResponse);
+        Page<ProfileResponse> results = careGiversPage.map(this::createLiteProfileResponse);
+
+        logger.debug("Async top-rated search completed - {} total elements", results.getTotalElements());
+        return CompletableFuture.completedFuture(results);
     }
 
     private ProfileResponse createLiteProfileResponse(CareGiver careGiver) {
@@ -158,8 +185,8 @@ public class SearchCareGiverService {
         response.setId(careGiver.getId());
         response.setEmail(careGiver.getEmail());
         response.setName(careGiver.getName());
-        response.setNik(null); // Hidden for security
-        response.setAddress(null); // Hidden for security
+        response.setNik(null);
+        response.setAddress(null);
         response.setPhoneNumber(careGiver.getPhoneNumber());
         response.setUserType("CAREGIVER");
         response.setSpeciality(careGiver.getSpeciality());
