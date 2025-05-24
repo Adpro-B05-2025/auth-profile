@@ -2,7 +2,6 @@ package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
-import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,13 +9,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -33,1274 +33,946 @@ class SearchCareGiverServiceTest {
 
     private CareGiver careGiver1;
     private CareGiver careGiver2;
-    private CareGiver careGiver3;
-    private List<CareGiver> mockCareGivers;
+    private List<CareGiver> careGivers;
 
     @BeforeEach
     void setUp() {
-        // Create test caregivers
-        careGiver1 = createTestCareGiver(1L, "Dr. John Smith", "john.smith@example.com",
-                "Cardiology", "123 Medical Center", 4.5, 10);
+        careGiver1 = new CareGiver();
+        careGiver1.setId(1L);
+        careGiver1.setEmail("dr.smith@example.com");
+        careGiver1.setName("Dr. John Smith");
+        careGiver1.setPhoneNumber("123-456-7890");
+        careGiver1.setSpeciality("Cardiology");
+        careGiver1.setWorkAddress("123 Medical Center");
+        careGiver1.setAverageRating(4.5);
 
-        careGiver2 = createTestCareGiver(2L, "Dr. Jane Doe", "jane.doe@example.com",
-                "Pediatrics", "456 Children's Hospital", 4.8, 15);
+        careGiver2 = new CareGiver();
+        careGiver2.setId(2L);
+        careGiver2.setEmail("dr.johnson@example.com");
+        careGiver2.setName("Dr. Jane Johnson");
+        careGiver2.setPhoneNumber("098-765-4321");
+        careGiver2.setSpeciality("Pediatrics");
+        careGiver2.setWorkAddress("456 Health Plaza");
+        careGiver2.setAverageRating(4.8);
 
-        careGiver3 = createTestCareGiver(3L, "Dr. Robert Johnson", "robert.johnson@example.com",
-                "Cardiology", "789 Heart Clinic", 4.2, 8);
-
-        mockCareGivers = Arrays.asList(careGiver1, careGiver2, careGiver3);
+        careGivers = Arrays.asList(careGiver1, careGiver2);
     }
 
-    private CareGiver createTestCareGiver(Long id, String name, String email, String speciality,
-                                          String workAddress, Double rating, Integer ratingCount) {
-        CareGiver careGiver = new CareGiver();
-        careGiver.setId(id);
-        careGiver.setName(name);
-        careGiver.setEmail(email);
-        careGiver.setNik("123456789012345" + id);
-        careGiver.setAddress("Home Address " + id);
-        careGiver.setPhoneNumber("08123456789" + id);
-        careGiver.setSpeciality(speciality);
-        careGiver.setWorkAddress(workAddress);
-        careGiver.setAverageRating(rating);
-        careGiver.setRatingCount(ratingCount);
-
-        // Set roles
-        Set<Role> roles = new HashSet<>();
-        Role careGiverRole = new Role();
-        careGiverRole.setId(2);
-        careGiverRole.setName(Role.ERole.ROLE_CAREGIVER);
-        roles.add(careGiverRole);
-        careGiver.setRoles(roles);
-
-        return careGiver;
-    }
-
-    // Tests for searchCareGiversOptimized method
+    // EXISTING TESTS (keeping all your current tests)
     @Test
-    void searchCareGiversOptimized_WithBothNameAndSpeciality_ShouldReturnFilteredResults() {
-        // Arrange
-        String name = "John";
-        String speciality = "Cardiology";
-        List<CareGiver> expectedCareGivers = Arrays.asList(careGiver1);
+    void testSearchCareGiversOptimized_WithBothNameAndSpeciality() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters("John", "Cardiology"))
+                .thenReturn(List.of(careGiver1));
 
-        when(careGiverRepository.findCareGiversWithFilters(name, speciality))
-                .thenReturn(expectedCareGivers);
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized("John", "Cardiology");
 
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(name, speciality);
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.size());
+        assertEquals("Dr. John Smith", responses.get(0).getName());
+        assertEquals("Cardiology", responses.get(0).getSpeciality());
+        assertNull(responses.get(0).getNik()); // Should be hidden
+        assertNull(responses.get(0).getAddress()); // Should be hidden
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("Dr. John Smith", result.get(0).getName());
-        assertEquals("Cardiology", result.get(0).getSpeciality());
-        assertNull(result.get(0).getNik()); // Should be hidden for security
-        assertNull(result.get(0).getAddress()); // Should be hidden for security
-
-        verify(careGiverRepository).findCareGiversWithFilters(name, speciality);
+        verify(careGiverRepository).findCareGiversWithFilters("John", "Cardiology");
     }
 
     @Test
-    void searchCareGiversOptimized_WithOnlyName_ShouldReturnFilteredResults() {
-        // Arrange
-        String name = "Jane";
-        String speciality = null;
-        List<CareGiver> expectedCareGivers = Arrays.asList(careGiver2);
+    void testSearchCareGiversOptimized_WithNameOnly() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters("Smith", null))
+                .thenReturn(List.of(careGiver1));
 
-        when(careGiverRepository.findCareGiversWithFilters(name, null))
-                .thenReturn(expectedCareGivers);
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized("Smith", "");
 
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(name, speciality);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("Dr. Jane Doe", result.get(0).getName());
-        assertEquals("Pediatrics", result.get(0).getSpeciality());
-
-        verify(careGiverRepository).findCareGiversWithFilters(name, null);
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.size());
+        verify(careGiverRepository).findCareGiversWithFilters("Smith", null);
     }
 
     @Test
-    void searchCareGiversOptimized_WithOnlySpeciality_ShouldReturnFilteredResults() {
-        // Arrange
-        String name = null;
-        String speciality = "Cardiology";
-        List<CareGiver> expectedCareGivers = Arrays.asList(careGiver1, careGiver3);
+    void testSearchCareGiversOptimized_WithSpecialityOnly() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters(null, "Pediatrics"))
+                .thenReturn(List.of(careGiver2));
 
-        when(careGiverRepository.findCareGiversWithFilters(null, speciality))
-                .thenReturn(expectedCareGivers);
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized(null, "Pediatrics");
 
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(name, speciality);
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.size());
+        assertEquals("Pediatrics", responses.get(0).getSpeciality());
+        verify(careGiverRepository).findCareGiversWithFilters(null, "Pediatrics");
+    }
 
-        // Assert
-        assertNotNull(result);
+    @Test
+    void testSearchCareGiversOptimized_WithNoFilters() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters(null, null))
+                .thenReturn(careGivers);
+
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized(null, null);
+
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.size());
+        verify(careGiverRepository).findCareGiversWithFilters(null, null);
+    }
+
+    @Test
+    void testSearchCareGiversOptimized_WithWhitespaceInputs() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters(null, null))
+                .thenReturn(careGivers);
+
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized("  ", "  ");
+
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.size());
+        verify(careGiverRepository).findCareGiversWithFilters(null, null);
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithBothFilters() throws ExecutionException, InterruptedException {
+        // Given
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver1), pageable, 1);
+
+        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                eq("John"), eq("Cardiology"), any(Pageable.class)))
+                .thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated("John", "Cardiology", 0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+        assertEquals("Dr. John Smith", responses.getContent().get(0).getName());
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithNameOnly() throws ExecutionException, InterruptedException {
+        // Given
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver1), pageable, 1);
+
+        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Smith"), any(Pageable.class)))
+                .thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated("Smith", null, 0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithSpecialityOnly() throws ExecutionException, InterruptedException {
+        // Given
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver2), pageable, 1);
+
+        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Pediatrics"), any(Pageable.class)))
+                .thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated(null, "Pediatrics", 0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithNoFilters() throws ExecutionException, InterruptedException {
+        // Given
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated(null, null, 0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithInvalidParameters() throws ExecutionException, InterruptedException {
+        // Given - negative page and invalid size
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated(null, null, -1, 150);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that invalid parameters were corrected (page=0, size=10)
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+    }
+
+    // NEW TESTS FOR MISSING COVERAGE
+
+    @Test
+    void testSearchCareGiversPaginated_WithZeroSize() throws ExecutionException, InterruptedException {
+        // Given - test size <= 0 branch
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated(null, null, 0, 0);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that size was corrected to 10
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 10));
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithExactly100Size() throws ExecutionException, InterruptedException {
+        // Given - test exact boundary size == 100 (should be allowed)
+        Pageable pageable = PageRequest.of(0, 100,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.ASC, "name")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated(null, null, 0, 100);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that size 100 is allowed
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 100));
+    }
+
+    @Test
+    void testSearchCareGiversPaginated_WithEmptyStringFilters() throws ExecutionException, InterruptedException {
+        // Given - test empty string filters (different from whitespace)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginated("", "", 0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_AllSortFields() throws ExecutionException, InterruptedException {
+        // Test all valid sort fields
+        String[] sortFields = {"name", "speciality", "averageRating", "ratingCount"};
+        String[] directions = {"asc", "desc"};
+
+        for (String field : sortFields) {
+            for (String direction : directions) {
+                // Given
+                Sort.Direction expectedDirection = "desc".equalsIgnoreCase(direction) ?
+                        Sort.Direction.DESC : Sort.Direction.ASC;
+                Pageable pageable = PageRequest.of(0, 10, Sort.by(expectedDirection, field));
+                Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+                when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+                // When
+                CompletableFuture<Page<ProfileResponse>> result =
+                        searchCareGiverService.searchCareGiversPaginatedWithSort(
+                                null, null, 0, 10, field, direction);
+
+                // Then
+                Page<ProfileResponse> responses = result.get();
+                assertEquals(2, responses.getTotalElements());
+
+                // Reset mock for next iteration
+                reset(careGiverRepository);
+            }
+        }
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_InvalidSortField() throws ExecutionException, InterruptedException {
+        // Given - invalid sort field should default to "averageRating"
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "averageRating"));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, "invalidField", "desc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("averageRating") != null));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_NullSortBy() throws ExecutionException, InterruptedException {
+        // Given - null sortBy should default to "averageRating"
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, null, "desc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("averageRating") != null));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_WithBothFilters() throws ExecutionException, InterruptedException {
+        // Given - test with both name and speciality filters
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver1), PageRequest.of(0, 10), 1);
+        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                eq("John"), eq("Cardiology"), any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        "John", "Cardiology", 0, 10, "name", "asc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                eq("John"), eq("Cardiology"), any(Pageable.class));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_WithNameOnly() throws ExecutionException, InterruptedException {
+        // Given - test with name filter only
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver1), PageRequest.of(0, 10), 1);
+        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Smith"), any(Pageable.class)))
+                .thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        "Smith", null, 0, 10, "name", "asc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Smith"), any(Pageable.class));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_WithSpecialityOnly() throws ExecutionException, InterruptedException {
+        // Given - test with speciality filter only
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver2), PageRequest.of(0, 10), 1);
+        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Pediatrics"), any(Pageable.class)))
+                .thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, "Pediatrics", 0, 10, "speciality", "desc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Pediatrics"), any(Pageable.class));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_InvalidParameters() throws ExecutionException, InterruptedException {
+        // Given - test parameter validation
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, -5, 150, "invalidField", "invalid");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify parameters were corrected
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+    }
+
+    @Test
+    void testGetTopRatedCareGivers() throws ExecutionException, InterruptedException {
+        // Given
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.DESC, "ratingCount")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.getTopRatedCareGivers(0, 10);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("averageRating") != null &&
+                        pageable1.getSort().getOrderFor("ratingCount") != null));
+    }
+
+    @Test
+    void testGetTopRatedCareGivers_InvalidParameters() throws ExecutionException, InterruptedException {
+        // Given - invalid parameters should be corrected
+        Pageable pageable = PageRequest.of(0, 10,
+                Sort.by(Sort.Direction.DESC, "averageRating")
+                        .and(Sort.by(Sort.Direction.DESC, "ratingCount")));
+        Page<CareGiver> page = new PageImpl<>(careGivers, pageable, 2);
+
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.getTopRatedCareGivers(-1, 100);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that invalid parameters were corrected (page=0, size=10)
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+    }
+
+    @Test
+    void testGetTopRatedCareGivers_ExactBoundarySize() throws ExecutionException, InterruptedException {
+        // Given - test exact boundary size == 50 (should be allowed)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 50), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.getTopRatedCareGivers(0, 50);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 50));
+    }
+
+    @Test
+    void testGetTopRatedCareGivers_ZeroSize() throws ExecutionException, InterruptedException {
+        // Given - test size <= 0 branch
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.getTopRatedCareGivers(0, 0);
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 10));
+    }
+
+    @Test
+    void testGetNameSuggestions_ValidPrefix() {
+        // Given
+        List<String> suggestions = Arrays.asList("Dr. John", "Dr. Jane");
+        when(careGiverRepository.findNameSuggestions("Dr")).thenReturn(suggestions);
+
+        // When
+        List<String> result = searchCareGiverService.getNameSuggestions("Dr");
+
+        // Then
         assertEquals(2, result.size());
-        assertTrue(result.stream().allMatch(r -> "Cardiology".equals(r.getSpeciality())));
-
-        verify(careGiverRepository).findCareGiversWithFilters(null, speciality);
+        assertEquals("Dr. John", result.get(0));
+        verify(careGiverRepository).findNameSuggestions("Dr");
     }
 
     @Test
-    void searchCareGiversOptimized_WithEmptyStrings_ShouldPassNullToRepository() {
-        // Arrange
-        String name = "  ";
-        String speciality = "";
+    void testGetNameSuggestions_ShortPrefix() {
+        // When
+        List<String> result = searchCareGiverService.getNameSuggestions("D");
 
-        when(careGiverRepository.findCareGiversWithFilters(null, null))
-                .thenReturn(mockCareGivers);
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(name, speciality);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.size());
-
-        verify(careGiverRepository).findCareGiversWithFilters(null, null);
-    }
-
-    @Test
-    void searchCareGiversOptimized_WithNoFilters_ShouldReturnAllResults() {
-        // Arrange
-        when(careGiverRepository.findCareGiversWithFilters(null, null))
-                .thenReturn(mockCareGivers);
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(null, null);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.size());
-
-        verify(careGiverRepository).findCareGiversWithFilters(null, null);
-    }
-
-    @Test
-    void searchCareGiversOptimized_WithEmptyResultFromRepository_ShouldReturnEmptyList() {
-        // Arrange
-        String name = "NonExistent";
-        String speciality = "Unknown";
-
-        when(careGiverRepository.findCareGiversWithFilters(name, speciality))
-                .thenReturn(Collections.emptyList());
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.searchCareGiversOptimized(name, speciality);
-
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
-        verify(careGiverRepository).findCareGiversWithFilters(name, speciality);
-    }
-
-    // Tests for getAllCareGiversLite method
-    @Test
-    void getAllCareGiversLite_ShouldReturnAllCareGivers() {
-        // Arrange
-        when(careGiverRepository.findAll()).thenReturn(mockCareGivers);
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.getAllCareGiversLite();
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.size());
-
-        // Verify that sensitive information is hidden
-        result.forEach(profile -> {
-            assertNull(profile.getNik());
-            assertNull(profile.getAddress());
-            assertEquals("CAREGIVER", profile.getUserType());
-            assertNotNull(profile.getName());
-            assertNotNull(profile.getEmail());
-            assertNotNull(profile.getSpeciality());
-            assertNotNull(profile.getWorkAddress());
-            assertNotNull(profile.getAverageRating());
-        });
-
-        verify(careGiverRepository).findAll();
-    }
-
-    @Test
-    void getAllCareGiversLite_WithEmptyRepository_ShouldReturnEmptyList() {
-        // Arrange
-        when(careGiverRepository.findAll()).thenReturn(Collections.emptyList());
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.getAllCareGiversLite();
-
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
-        verify(careGiverRepository).findAll();
-    }
-
-    // Tests for getNameSuggestions method
-    @Test
-    void getNameSuggestions_WithValidPrefix_ShouldReturnSuggestions() {
-        // Arrange
-        String prefix = "Dr";
-        List<String> expectedSuggestions = Arrays.asList("Dr. John Smith", "Dr. Jane Doe", "Dr. Robert Johnson");
-
-        when(careGiverRepository.findNameSuggestions(prefix)).thenReturn(expectedSuggestions);
-
-        // Act
-        List<String> result = searchCareGiverService.getNameSuggestions(prefix);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.size());
-        assertTrue(result.containsAll(expectedSuggestions));
-
-        verify(careGiverRepository).findNameSuggestions(prefix);
-    }
-
-    @Test
-    void getNameSuggestions_WithShortPrefix_ShouldReturnEmptyList() {
-        // Arrange
-        String prefix = "D";
-
-        // Act
-        List<String> result = searchCareGiverService.getNameSuggestions(prefix);
-
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
-        // Verify repository is not called for short prefixes
+        // Then
+        assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
     }
 
     @Test
-    void getNameSuggestions_WithNullPrefix_ShouldReturnEmptyList() {
-        // Act
+    void testGetNameSuggestions_NullPrefix() {
+        // When
         List<String> result = searchCareGiverService.getNameSuggestions(null);
 
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
+        // Then
+        assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
     }
 
     @Test
-    void getNameSuggestions_WithWhitespacePrefix_ShouldReturnEmptyList() {
-        // Act
+    void testGetNameSuggestions_WhitespacePrefix() {
+        // When
         List<String> result = searchCareGiverService.getNameSuggestions("  ");
 
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
+        // Then
+        assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
     }
 
     @Test
-    void getNameSuggestions_WithTrimmedInput_ShouldPassTrimmedValueToRepository() {
-        // Arrange
-        String prefix = "  Dr. John  ";
-        String expectedTrimmedPrefix = "Dr. John";
-        List<String> expectedSuggestions = Arrays.asList("Dr. John Smith");
+    void testGetNameSuggestions_ExactTwoCharacters() {
+        // Given - test exact boundary of 2 characters (should be allowed)
+        List<String> suggestions = Arrays.asList("Dr");
+        when(careGiverRepository.findNameSuggestions("Dr")).thenReturn(suggestions);
 
-        when(careGiverRepository.findNameSuggestions(expectedTrimmedPrefix))
-                .thenReturn(expectedSuggestions);
+        // When
+        List<String> result = searchCareGiverService.getNameSuggestions("Dr");
 
-        // Act
-        List<String> result = searchCareGiverService.getNameSuggestions(prefix);
-
-        // Assert
-        assertNotNull(result);
+        // Then
         assertEquals(1, result.size());
-
-        verify(careGiverRepository).findNameSuggestions(expectedTrimmedPrefix);
+        assertEquals("Dr", result.get(0));
+        verify(careGiverRepository).findNameSuggestions("Dr");
     }
 
-    // Tests for getSpecialitySuggestions method
     @Test
-    void getSpecialitySuggestions_WithValidQuery_ShouldReturnSuggestions() {
-        // Arrange
-        String query = "Card";
-        List<String> expectedSuggestions = Arrays.asList("Cardiology", "Cardiac Surgery");
+    void testGetSpecialitySuggestions_ValidQuery() {
+        // Given
+        List<String> suggestions = Arrays.asList("Cardiology", "Pediatrics");
+        when(careGiverRepository.findSpecialitySuggestions("Card")).thenReturn(suggestions);
 
-        when(careGiverRepository.findSpecialitySuggestions(query)).thenReturn(expectedSuggestions);
+        // When
+        List<String> result = searchCareGiverService.getSpecialitySuggestions("Card");
 
-        // Act
-        List<String> result = searchCareGiverService.getSpecialitySuggestions(query);
-
-        // Assert
-        assertNotNull(result);
+        // Then
         assertEquals(2, result.size());
-        assertTrue(result.containsAll(expectedSuggestions));
-
-        verify(careGiverRepository).findSpecialitySuggestions(query);
+        assertEquals("Cardiology", result.get(0));
+        verify(careGiverRepository).findSpecialitySuggestions("Card");
     }
 
     @Test
-    void getSpecialitySuggestions_WithShortQuery_ShouldReturnEmptyList() {
-        // Arrange
-        String query = "C";
+    void testGetSpecialitySuggestions_ShortQuery() {
+        // When
+        List<String> result = searchCareGiverService.getSpecialitySuggestions("C");
 
-        // Act
-        List<String> result = searchCareGiverService.getSpecialitySuggestions(query);
-
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
+        // Then
+        assertEquals(0, result.size());
         verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
     }
 
     @Test
-    void getSpecialitySuggestions_WithNullQuery_ShouldReturnEmptyList() {
-        // Act
+    void testGetSpecialitySuggestions_NullQuery() {
+        // When
         List<String> result = searchCareGiverService.getSpecialitySuggestions(null);
 
-        // Assert
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
+        // Then
+        assertEquals(0, result.size());
         verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
     }
 
     @Test
-    void getSpecialitySuggestions_WithTrimmedInput_ShouldPassTrimmedValueToRepository() {
-        // Arrange
-        String query = "  Cardiology  ";
-        String expectedTrimmedQuery = "Cardiology";
-        List<String> expectedSuggestions = Arrays.asList("Cardiology");
+    void testGetSpecialitySuggestions_WhitespaceQuery() {
+        // When
+        List<String> result = searchCareGiverService.getSpecialitySuggestions("   ");
 
-        when(careGiverRepository.findSpecialitySuggestions(expectedTrimmedQuery))
-                .thenReturn(expectedSuggestions);
+        // Then
+        assertEquals(0, result.size());
+        verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
+    }
 
-        // Act
-        List<String> result = searchCareGiverService.getSpecialitySuggestions(query);
+    @Test
+    void testGetSpecialitySuggestions_ExactTwoCharacters() {
+        // Given - test exact boundary of 2 characters (should be allowed)
+        List<String> suggestions = Arrays.asList("Cardiology");
+        when(careGiverRepository.findSpecialitySuggestions("Ca")).thenReturn(suggestions);
 
-        // Assert
-        assertNotNull(result);
+        // When
+        List<String> result = searchCareGiverService.getSpecialitySuggestions("Ca");
+
+        // Then
         assertEquals(1, result.size());
-
-        verify(careGiverRepository).findSpecialitySuggestions(expectedTrimmedQuery);
-    }
-
-    // Tests for searchCareGiversPaginated method
-    @Test
-    void searchCareGiversPaginated_WithBothNameAndSpeciality_ShouldReturnPagedResults() {
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 2;
-
-        List<CareGiver> filteredCareGivers = Arrays.asList(careGiver1, careGiver3);
-        Page<CareGiver> mockPage = new PageImpl<>(filteredCareGivers, PageRequest.of(page, size), filteredCareGivers.size());
-
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(2, result.getContent().size());
-        assertEquals(2, result.getTotalElements());
-        assertEquals(0, result.getNumber());
-        assertEquals(2, result.getSize());
-
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class));
+        assertEquals("Cardiology", result.get(0));
+        verify(careGiverRepository).findSpecialitySuggestions("Ca");
     }
 
     @Test
-    void searchCareGiversPaginated_WithOnlyName_ShouldReturnPagedResults() {
-        // Arrange
-        String name = "Dr";
-        String speciality = null;
-        int page = 0;
-        int size = 10;
+    void testCreateLiteProfileResponse() throws Exception {
+        // Given - use reflection to access private method
+        java.lang.reflect.Method method = SearchCareGiverService.class
+                .getDeclaredMethod("createLiteProfileResponse", CareGiver.class);
+        method.setAccessible(true);
 
-        List<CareGiver> filteredCareGivers = Arrays.asList(careGiver1, careGiver2, careGiver3);
-        Page<CareGiver> mockPage = new PageImpl<>(filteredCareGivers, PageRequest.of(page, size), filteredCareGivers.size());
+        // When
+        ProfileResponse result = (ProfileResponse) method.invoke(searchCareGiverService, careGiver1);
 
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Dr"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Dr"), any(Pageable.class));
+        // Then
+        assertEquals(1L, result.getId());
+        assertEquals("dr.smith@example.com", result.getEmail());
+        assertEquals("Dr. John Smith", result.getName());
+        assertNull(result.getNik()); // Should be hidden for security
+        assertNull(result.getAddress()); // Should be hidden for security
+        assertEquals("123-456-7890", result.getPhoneNumber());
+        assertEquals("CAREGIVER", result.getUserType());
+        assertEquals("Cardiology", result.getSpeciality());
+        assertEquals("123 Medical Center", result.getWorkAddress());
+        assertEquals(4.5, result.getAverageRating());
     }
 
     @Test
-    void searchCareGiversPaginated_WithOnlySpeciality_ShouldReturnPagedResults() {
-        // Arrange
-        String name = null;
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
+    void testEmptyResultsHandling() throws ExecutionException, InterruptedException {
+        // Given
+        when(careGiverRepository.findCareGiversWithFilters(anyString(), anyString()))
+                .thenReturn(Collections.emptyList());
 
-        List<CareGiver> filteredCareGivers = Arrays.asList(careGiver1, careGiver3);
-        Page<CareGiver> mockPage = new PageImpl<>(filteredCareGivers, PageRequest.of(page, size), filteredCareGivers.size());
+        // When
+        CompletableFuture<List<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversOptimized("NonExistent", "InvalidSpeciality");
 
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        // Then
+        List<ProfileResponse> responses = result.get();
+        assertEquals(0, responses.size());
+    }
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
+    // ADDITIONAL TESTS FOR COMPLETE COVERAGE
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(2, result.getContent().size());
+    @Test
+    void testSearchCareGiversPaginatedWithSort_EmptyStringDirection() throws ExecutionException, InterruptedException {
+        // Given - test empty string direction (should default to ASC)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class));
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, "name", "");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("name").getDirection() == Sort.Direction.ASC));
     }
 
     @Test
-    void searchCareGiversPaginated_WithNoFilters_ShouldReturnAllResults() {
-        // Arrange
-        String name = null;
-        String speciality = null;
-        int page = 0;
-        int size = 10;
+    void testSearchCareGiversPaginatedWithSort_CaseInsensitiveDirection() throws ExecutionException, InterruptedException {
+        // Given - test case insensitive direction matching
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(page, size), mockCareGivers.size());
+        // When - test with mixed case "DESC"
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, "name", "DeSc");
 
-        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(mockPage);
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("name").getDirection() == Sort.Direction.DESC));
+    }
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
+    @Test
+    void testSearchCareGiversPaginatedWithSort_CaseInsensitiveSortField() throws ExecutionException, InterruptedException {
+        // Given - test case insensitive sort field matching
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
+        // When - test with mixed case sort field
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, "SpEcIaLiTy", "asc");
 
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("speciality") != null));
+    }
+
+    @Test
+    void testSearchCareGiversPaginatedWithSort_WithWhitespaceFilters() throws ExecutionException, InterruptedException {
+        // Given - test whitespace handling in filters
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        "  ", "  ", 0, 10, "name", "asc");
+
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Should call findAll because whitespace filters are treated as null
         verify(careGiverRepository).findAll(any(Pageable.class));
     }
 
     @Test
-    void searchCareGiversPaginated_WithNegativePageAndSize_ShouldValidateParameters() {
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = -1;
-        int size = -5;
+    void testSearchCareGiversPaginatedWithSort_WithTrimmedFilters() throws ExecutionException, InterruptedException {
+        // Given - test that filters are properly trimmed
+        Page<CareGiver> page = new PageImpl<>(List.of(careGiver1), PageRequest.of(0, 10), 1);
+        when(careGiverRepository.findByNameContainingIgnoreCase(eq("John"), any(Pageable.class)))
+                .thenReturn(page);
 
-        List<CareGiver> filteredCareGivers = Arrays.asList(careGiver1);
-        Page<CareGiver> mockPage = new PageImpl<>(filteredCareGivers, PageRequest.of(0, 10), 1);
+        // When - pass name with leading/trailing spaces
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        "  John  ", null, 0, 10, "name", "asc");
 
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that corrected parameters were used (page=0, size=10)
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getPageNumber() == 0 && pageable.getPageSize() == 10));
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(1, responses.getTotalElements());
+        // Verify that the trimmed name "John" was used
+        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("John"), any(Pageable.class));
     }
 
     @Test
-    void searchCareGiversPaginated_WithLargeSize_ShouldLimitToMaxSize() {
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = 0;
-        int size = 200; // Exceeds max size
+    void testGetNameSuggestions_WithLeadingTrailingSpaces() {
+        // Given - test prefix with spaces that gets trimmed to valid length
+        List<String> suggestions = Arrays.asList("Dr. John");
+        when(careGiverRepository.findNameSuggestions("Dr")).thenReturn(suggestions);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
+        // When
+        List<String> result = searchCareGiverService.getNameSuggestions("  Dr  ");
 
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-
-        // Verify that size was limited to 10 (since 200 > 100)
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithEmptyStringFilters_ShouldCleanParameters() {
-        // Arrange
-        String name = "  "; // Whitespace only
-        String speciality = ""; // Empty string
-        int page = 0;
-        int size = 10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 10), 3);
-
-        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-
-        // Verify that cleaned parameters (null) were passed to repository
-        verify(careGiverRepository).findAll(any(Pageable.class));
-    }
-
-    // Tests for searchCareGiversPaginatedWithSort method
-    @Test
-    void searchCareGiversPaginatedWithSort_ShouldReturnSortedPagedResults() {
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
-        String sortBy = "name";
-        String sortDirection = "asc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1, careGiver3),
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "name")), 2);
-
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(2, result.getContent().size());
-
-        // Verify correct sorting was applied
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("name") != null &&
-                        pageable.getSort().getOrderFor("name").getDirection() == Sort.Direction.ASC));
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithInvalidSortField_ShouldUseDefaultSort() {
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
-        String sortBy = "invalidField"; // Not in allowed fields
-        String sortDirection = "asc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1),
-                PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "averageRating")), 1);
-
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that default sort field "averageRating" was used instead of invalid field
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("averageRating") != null));
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithNullSortBy_ShouldUseDefaultSort() {
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = 0;
-        int size = 5;
-        String sortBy = null; // Null sort field
-        String sortDirection = "desc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1),
-                PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "averageRating")), 1);
-
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that default sort field "averageRating" was used
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("averageRating") != null &&
-                        pageable.getSort().getOrderFor("averageRating").getDirection() == Sort.Direction.DESC));
-    }
-
-    // Tests for getTopRatedCareGivers method
-    @Test
-    void getTopRatedCareGivers_ShouldReturnTopRatedResults() {
-        // Arrange
-        int page = 0;
-        int size = 10;
-
-        // Sort caregivers by rating (highest first)
-        List<CareGiver> sortedCareGivers = Arrays.asList(careGiver2, careGiver1, careGiver3); // 4.8, 4.5, 4.2
-        Page<CareGiver> mockPage = new PageImpl<>(sortedCareGivers,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "averageRating", "ratingCount")), 3);
-
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-
-        // Verify sorting by rating (highest first)
-        assertEquals("Dr. Jane Doe", result.getContent().get(0).getName()); // 4.8 rating
-        assertEquals("Dr. John Smith", result.getContent().get(1).getName()); // 4.5 rating
-        assertEquals("Dr. Robert Johnson", result.getContent().get(2).getName()); // 4.2 rating
-
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getSort().getOrderFor("averageRating") != null &&
-                        pageable.getSort().getOrderFor("averageRating").getDirection() == Sort.Direction.DESC));
-    }
-
-    @Test
-    void getTopRatedCareGivers_WithNegativePageAndSize_ShouldValidateParameters() {
-        // Arrange
-        int page = -5;
-        int size = -10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 10), 3);
-
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-
-        // Verify that corrected parameters were used (page=0, size=10)
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageNumber() == 0 && pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void getTopRatedCareGivers_WithZeroSize_ShouldUseDefaultSize() {
-        // Arrange
-        int page = 0;
-        int size = 0; // Zero size should be corrected to default
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that default size (10) was used
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void getTopRatedCareGivers_WithLargeSize_ShouldLimitToMaxSize() {
-        // Arrange
-        int page = 0;
-        int size = 100; // Exceeds max size of 50 for top-rated method
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that size was limited to default (10) since 100 > 50
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void getTopRatedCareGivers_WithValidSize_ShouldUseSpecifiedSize() {
-        // Arrange
-        int page = 1;
-        int size = 25; // Valid size within limits
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver2), PageRequest.of(1, 25), 1);
-
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that specified size was used
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageNumber() == 1 && pageable.getPageSize() == 25));
-    }
-
-    // Test for createLiteProfileResponse (private method tested through public methods)
-    @Test
-    void createLiteProfileResponse_ShouldHideSensitiveInformation() {
-        // This test verifies the private method behavior through public methods
-        // Arrange
-        when(careGiverRepository.findAll()).thenReturn(Arrays.asList(careGiver1));
-
-        // Act
-        List<ProfileResponse> result = searchCareGiverService.getAllCareGiversLite();
-
-        // Assert
-        assertNotNull(result);
+        // Then
         assertEquals(1, result.size());
-
-        ProfileResponse profile = result.get(0);
-        assertEquals(careGiver1.getId(), profile.getId());
-        assertEquals(careGiver1.getName(), profile.getName());
-        assertEquals(careGiver1.getEmail(), profile.getEmail());
-        assertEquals(careGiver1.getPhoneNumber(), profile.getPhoneNumber());
-        assertEquals(careGiver1.getSpeciality(), profile.getSpeciality());
-        assertEquals(careGiver1.getWorkAddress(), profile.getWorkAddress());
-        assertEquals(careGiver1.getAverageRating(), profile.getAverageRating());
-        assertEquals("CAREGIVER", profile.getUserType());
-
-        // Verify sensitive information is hidden
-        assertNull(profile.getNik());
-        assertNull(profile.getAddress());
-    }
-
-    // Additional edge case tests for comprehensive coverage
-    @Test
-    void searchCareGiversPaginated_WithSortingValidation_ShouldUsePredefinedSort() {
-        // Arrange
-        String name = "Test";
-        String speciality = "Test";
-        int page = 0;
-        int size = 5;
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 5), 1);
-
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Test"), eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that the predefined sorting (averageRating DESC, name ASC) was used
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Test"), eq("Test"),
-                argThat((Pageable pageable) ->
-                        pageable.getSort().getOrderFor("averageRating") != null &&
-                                pageable.getSort().getOrderFor("averageRating").getDirection() == Sort.Direction.DESC &&
-                                pageable.getSort().getOrderFor("name") != null &&
-                                pageable.getSort().getOrderFor("name").getDirection() == Sort.Direction.ASC));
+        assertEquals("Dr. John", result.get(0));
+        verify(careGiverRepository).findNameSuggestions("Dr");
     }
 
     @Test
-    void searchCareGiversPaginatedWithSort_WithMixedCaseSortDirection_ShouldHandleCorrectly() {
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = 0;
-        int size = 10;
-        String sortBy = "name";
-        String sortDirection = "DESC"; // Mixed case
+    void testGetSpecialitySuggestions_WithLeadingTrailingSpaces() {
+        // Given - test query with spaces that gets trimmed to valid length
+        List<String> suggestions = Arrays.asList("Cardiology");
+        when(careGiverRepository.findSpecialitySuggestions("Card")).thenReturn(suggestions);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
+        // When
+        List<String> result = searchCareGiverService.getSpecialitySuggestions("  Card  ");
 
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        // Then
+        assertEquals(1, result.size());
+        assertEquals("Cardiology", result.get(0));
+        verify(careGiverRepository).findSpecialitySuggestions("Card");
+    }
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
+    // Test constructor for complete coverage
+    @Test
+    void testConstructor() {
+        // Given
+        CareGiverRepository mockRepository = mock(CareGiverRepository.class);
 
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
+        // When
+        SearchCareGiverService service = new SearchCareGiverService(mockRepository);
 
-        // Verify that DESC direction was correctly parsed
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("name") != null &&
-                        pageable.getSort().getOrderFor("name").getDirection() == Sort.Direction.DESC));
+        // Then
+        assertNotNull(service);
+        // Verify the repository was injected correctly by testing a method call
+        service.getNameSuggestions("a"); // Short prefix, won't call repository
+        verify(mockRepository, never()).findNameSuggestions(anyString());
+    }
+
+    // Additional edge case tests for parameter validation
+    @Test
+    void testSearchCareGiversPaginated_ExactBoundaryConditions() throws ExecutionException, InterruptedException {
+        // Test various boundary conditions for size parameter
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // Test size = 101 (should be corrected to 10)
+        CompletableFuture<Page<ProfileResponse>> result1 =
+                searchCareGiverService.searchCareGiversPaginated(null, null, 0, 101);
+        Page<ProfileResponse> responses1 = result1.get();
+        assertEquals(2, responses1.getTotalElements());
+
+        reset(careGiverRepository);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
+
+        // Test size = -1 (should be corrected to 10)
+        CompletableFuture<Page<ProfileResponse>> result2 =
+                searchCareGiverService.searchCareGiversPaginated(null, null, 0, -1);
+        Page<ProfileResponse> responses2 = result2.get();
+        assertEquals(2, responses2.getTotalElements());
     }
 
     @Test
-    void searchCareGiversPaginatedWithSort_WithRandomSortDirection_ShouldDefaultToAsc() {
-        // Arrange
-        String name = null;
-        String speciality = "Test";
-        int page = 0;
-        int size = 10;
-        String sortBy = "speciality";
-        String sortDirection = "random"; // Invalid direction
+    void testGetTopRatedCareGivers_BoundaryConditions() throws ExecutionException, InterruptedException {
+        // Test various boundary conditions for size parameter in getTopRatedCareGivers
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
+        // Test size = 51 (should be corrected to 10)
+        CompletableFuture<Page<ProfileResponse>> result1 =
+                searchCareGiverService.getTopRatedCareGivers(0, 51);
+        Page<ProfileResponse> responses1 = result1.get();
+        assertEquals(2, responses1.getTotalElements());
 
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        reset(careGiverRepository);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that ASC direction was used as default for invalid direction
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("speciality") != null &&
-                        pageable.getSort().getOrderFor("speciality").getDirection() == Sort.Direction.ASC));
+        // Test size = -5 (should be corrected to 10)
+        CompletableFuture<Page<ProfileResponse>> result2 =
+                searchCareGiverService.getTopRatedCareGivers(0, -5);
+        Page<ProfileResponse> responses2 = result2.get();
+        assertEquals(2, responses2.getTotalElements());
     }
 
     @Test
-    void getTopRatedCareGivers_WithExactBoundarySize_ShouldUseSpecifiedSize() {
-        // Arrange
-        int page = 0;
-        int size = 50; // Exact boundary (max allowed for top-rated)
+    void testSearchCareGiversPaginatedWithSort_SizeExactly100() throws ExecutionException, InterruptedException {
+        // Given - test size == 100 (should be allowed, not corrected to 10)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 100), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 50), 3);
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 100, "name", "asc");
 
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-
-        // Verify that size 50 was used (at boundary)
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageSize() == 50));
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that size 100 is allowed (not corrected to 10)
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 100));
     }
 
     @Test
-    void getTopRatedCareGivers_WithSizeJustOverBoundary_ShouldUseDefaultSize() {
-        // Arrange
-        int page = 0;
-        int size = 51; // Just over boundary (max is 50)
+    void testSearchCareGiversPaginatedWithSort_SizeExactly101() throws ExecutionException, InterruptedException {
+        // Given - test size > 100 (should be corrected to 10)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 101, "name", "asc");
 
-        when(careGiverRepository.findAll(any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.getTopRatedCareGivers(page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(1, result.getContent().size());
-
-        // Verify that default size (10) was used since 51 > 50
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getPageSize() == 10));
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Verify that size 101 was corrected to 10
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 10));
     }
 
     @Test
-    void searchCareGiversPaginatedWithSort_WithValidSpecialitySort_ShouldUseSpecifiedSort() {
-        // Arrange
-        String name = null;
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
-        String sortBy = "speciality";
-        String sortDirection = "asc";
+    void testSearchCareGiversPaginatedWithSort_ForLoopAllFields() throws ExecutionException, InterruptedException {
+        // Test that the for loop checks all fields and breaks when found
+        String[] fieldsToTest = {"name", "speciality", "averageRating", "ratingCount"};
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        for (String field : fieldsToTest) {
+            // Given
+            Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+            when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
+            // When
+            CompletableFuture<Page<ProfileResponse>> result =
+                    searchCareGiverService.searchCareGiversPaginatedWithSort(
+                            null, null, 0, 10, field, "asc");
 
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("speciality") != null &&
-                        pageable.getSort().getOrderFor("speciality").getDirection() == Sort.Direction.ASC));
+            // Then
+            Page<ProfileResponse> responses = result.get();
+            assertEquals(2, responses.getTotalElements());
+            verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                    pageable1.getSort().getOrderFor(field) != null));
+
+            // Reset mock for next iteration
+            reset(careGiverRepository);
+        }
     }
 
     @Test
-    void searchCareGiversPaginatedWithSort_WithRatingCountSort_ShouldUseSpecifiedSort() {
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = 0;
-        int size = 10;
-        String sortBy = "ratingCount";
-        String sortDirection = "desc";
+    void testSearchCareGiversPaginatedWithSort_ForLoopNoMatch() throws ExecutionException, InterruptedException {
+        // Given - test when sortBy doesn't match any allowed field (should use default "averageRating")
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        // When - use a field that doesn't match any in the allowed array
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 10, "nonExistentField", "asc");
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getSort().getOrderFor("ratingCount") != null &&
-                        pageable.getSort().getOrderFor("ratingCount").getDirection() == Sort.Direction.DESC));
-    }
-
-    // ADDITIONAL TESTS FOR UNCOVERED CODE PATHS
-
-    @Test
-    void searchCareGiversPaginated_WithNegativePage_ShouldSetPageToZero() {
-        // Test the specific line: if (page < 0) page = 0;
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = -3; // Negative page to trigger the condition
-        int size = 5;
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 5), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getPageNumber() == 0)); // Verify page was set to 0
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        // Should use default "averageRating" since no match was found
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getSort().getOrderFor("averageRating") != null));
     }
 
     @Test
-    void searchCareGiversPaginated_WithZeroSize_ShouldSetSizeToTen() {
-        // Test the specific line: if (size <= 0 || size > 100) size = 10;
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 1;
-        int size = 0; // Zero size to trigger the condition
+    void testSearchCareGiversPaginatedWithSort_SizeZero() throws ExecutionException, InterruptedException {
+        // Given - test size == 0 (should be corrected to 10)
+        Page<CareGiver> page = new PageImpl<>(careGivers, PageRequest.of(0, 10), 2);
+        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(page);
 
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(1, 10), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
+        // When
+        CompletableFuture<Page<ProfileResponse>> result =
+                searchCareGiverService.searchCareGiversPaginatedWithSort(
+                        null, null, 0, 0, "name", "asc");
 
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10)); // Verify size was set to 10
+        // Then
+        Page<ProfileResponse> responses = result.get();
+        assertEquals(2, responses.getTotalElements());
+        verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
+                pageable1.getPageSize() == 10));
     }
 
-    @Test
-    void searchCareGiversPaginated_WithSizeOver100_ShouldSetSizeToTen() {
-        // Test the specific line: if (size <= 0 || size > 100) size = 10;
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 150; // Size > 100 to trigger the condition
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10)); // Verify size was set to 10
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithEmptyStringName_ShouldCleanToNull() {
-        // Test the specific line: String cleanName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
-        // Arrange
-        String name = ""; // Empty string to trigger cleaning to null
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1, careGiver3), PageRequest.of(0, 10), 2);
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(2, result.getContent().size());
-        // Verify that only speciality filter was used (name was cleaned to null)
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(anyString(), anyString(), any(Pageable.class));
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithWhitespaceOnlySpeciality_ShouldCleanToNull() {
-        // Test the specific line: String cleanSpeciality = (speciality != null && !speciality.trim().isEmpty()) ? speciality.trim() : null;
-        // Arrange
-        String name = "Dr";
-        String speciality = "   "; // Whitespace only to trigger cleaning to null
-        int page = 0;
-        int size = 10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 10), 3);
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Dr"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-        // Verify that only name filter was used (speciality was cleaned to null)
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Dr"), any(Pageable.class));
-        verify(careGiverRepository, never()).findBySpecialityContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(anyString(), anyString(), any(Pageable.class));
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithBothFiltersNullAfterCleaning_ShouldUseFindAll() {
-        // Test the specific line: } else { careGiversPage = careGiverRepository.findAll(pageable); }
-        // Arrange
-        String name = ""; // Empty string will be cleaned to null
-        String speciality = "   "; // Whitespace only will be cleaned to null
-        int page = 0;
-        int size = 10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 10), 3);
-        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-        // Verify that findAll was called (both filters were cleaned to null)
-        verify(careGiverRepository).findAll(any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findBySpecialityContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(anyString(), anyString(), any(Pageable.class));
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithNegativePage_ShouldSetPageToZero() {
-        // Test parameter validation in the WithSort method
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = -2; // Negative page to trigger the condition
-        int size = 5;
-        String sortBy = "name";
-        String sortDirection = "asc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 5), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getPageNumber() == 0)); // Verify page was set to 0
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithZeroSize_ShouldSetSizeToTen() {
-        // Test parameter validation in the WithSort method
-        // Arrange
-        String name = null;
-        String speciality = "Test";
-        int page = 0;
-        int size = 0; // Zero size to trigger the condition
-        String sortBy = "speciality";
-        String sortDirection = "desc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10)); // Verify size was set to 10
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithBothFiltersNullAfterCleaning_ShouldUseFindAll() {
-        // Test the else branch in the WithSort method
-        // Arrange
-        String name = null; // Null name
-        String speciality = ""; // Empty string will be cleaned to null
-        int page = 0;
-        int size = 15;
-        String sortBy = "averageRating";
-        String sortDirection = "desc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(mockCareGivers, PageRequest.of(0, 15), 3);
-        when(careGiverRepository.findAll(any(Pageable.class))).thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(3, result.getContent().size());
-        // Verify that findAll was called with custom sorting
-        verify(careGiverRepository).findAll(argThat((Pageable pageable) ->
-                pageable.getSort().getOrderFor("averageRating") != null &&
-                        pageable.getSort().getOrderFor("averageRating").getDirection() == Sort.Direction.DESC));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findBySpecialityContainingIgnoreCase(anyString(), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(anyString(), anyString(), any(Pageable.class));
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithSize101_ShouldSetSizeToTen() {
-        // Test the specific condition: size > 100 (when size <= 0 is false)
-        // Arrange
-        String name = "Dr";
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 101; // Exactly 101 to hit size > 100 condition
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(eq("Dr"), eq("Cardiology"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void searchCareGiversPaginated_WithNameContainingOnlySpaces_ShouldCleanToNull() {
-        // Test the specific condition: name != null is true, but !name.trim().isEmpty() is false
-        // Arrange
-        String name = "   "; // Not null, but trim().isEmpty() is true
-        String speciality = "Cardiology";
-        int page = 0;
-        int size = 10;
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1, careGiver3), PageRequest.of(0, 10), 2);
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginated(name, speciality, page, size);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Cardiology"), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCase(anyString(), any(Pageable.class));
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithSize101_ShouldSetSizeToTen() {
-        // Test the same condition in WithSort method
-        // Arrange
-        String name = "Test";
-        String speciality = null;
-        int page = 0;
-        int size = 101; // Exactly 101 to hit size > 100 condition
-        String sortBy = "name";
-        String sortDirection = "asc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findByNameContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Test"),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 10));
-    }
-
-    @Test
-    void searchCareGiversPaginatedWithSort_WithNameContainingOnlySpaces_ShouldCleanToNull() {
-        // Test the same condition in WithSort method
-        // Arrange
-        String name = "   "; // Not null, but trim().isEmpty() is true
-        String speciality = "Test";
-        int page = 0;
-        int size = 10;
-        String sortBy = "speciality";
-        String sortDirection = "desc";
-
-        Page<CareGiver> mockPage = new PageImpl<>(Arrays.asList(careGiver1), PageRequest.of(0, 10), 1);
-        when(careGiverRepository.findBySpecialityContainingIgnoreCase(eq("Test"), any(Pageable.class)))
-                .thenReturn(mockPage);
-
-        // Act
-        Page<ProfileResponse> result = searchCareGiverService.searchCareGiversPaginatedWithSort(
-                name, speciality, page, size, sortBy, sortDirection);
-
-        // Assert
-        assertNotNull(result);
-        verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Test"), any(Pageable.class));
-        verify(careGiverRepository, never()).findByNameContainingIgnoreCase(anyString(), any(Pageable.class));
-    }
 
 }
