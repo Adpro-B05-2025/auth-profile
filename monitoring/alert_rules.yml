@@ -1,0 +1,127 @@
+groups:
+  - name: pandacare-auth-profile-alerts
+    rules:
+      # Application Health Alerts
+      - alert: ApplicationDown
+        expr: up{job="pandacare-auth-profile"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PandaCare Auth-Profile service is down"
+          description: "The PandaCare Auth-Profile service has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} per second over the last 5 minutes."
+
+      # Authentication Alerts
+      - alert: HighFailedLoginRate
+        expr: rate(auth_login_failed_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed login rate"
+          description: "Failed login rate is {{ $value }} per second, which may indicate a brute force attack."
+
+      - alert: AuthorizationDeniedSpike
+        expr: rate(auth_authorization_denied_total[5m]) > 2
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authorization denial rate"
+          description: "Authorization denied rate is {{ $value }} per second, which may indicate unauthorized access attempts."
+
+      # Performance Alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time"
+          description: "95th percentile response time is {{ $value }}s, which is above the 2s threshold."
+
+      - alert: HighSearchLatency
+        expr: histogram_quantile(0.95, rate(search_caregivers_optimized_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High search latency"
+          description: "95th percentile search latency is {{ $value }}s."
+
+      # System Resource Alerts
+      - alert: HighMemoryUsage
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM heap memory usage"
+          description: "JVM heap memory usage is {{ $value }}%."
+
+      - alert: HighCPUUsage
+        expr: process_cpu_usage > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%."
+
+      # Database Connection Alerts
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: hikaricp_connections_active >= hikaricp_connections_max * 0.9
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Active connections ({{ $value }}) are close to the maximum pool size."
+
+      - alert: DatabaseConnectionTimeout
+        expr: rate(hikaricp_connections_timeout_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection timeouts detected"
+          description: "Database connection timeout rate is {{ $value }} per second."
+
+  - name: system-alerts
+    rules:
+      # Node/System Alerts
+      - alert: HighSystemCPU
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High system CPU usage"
+          description: "System CPU usage is {{ $value }}% on {{ $labels.instance }}."
+
+      - alert: HighSystemMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High system memory usage"
+          description: "System memory usage is {{ $value }}% on {{ $labels.instance }}."
+
+      - alert: LowDiskSpace
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is {{ $value }}% on {{ $labels.instance }}:{{ $labels.mountpoint }}."
