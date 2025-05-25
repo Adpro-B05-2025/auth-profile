@@ -68,13 +68,6 @@ public interface IProfileService {
      */
     ProfileResponse getCareGiverProfileLite(Long caregiverId);
 
-    /**
-     * Get user name by ID (for service-to-service calls)
-     * @param userId the user ID
-     * @return the user's name
-     */
-
-    List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time);
 
     RatingSummaryResponse getRatingSummaryForCurrentUser();
 

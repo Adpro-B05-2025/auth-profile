@@ -119,6 +119,7 @@ public class ProfileController {
     public ResponseEntity<RatingSummaryResponse> getCaregiverRatingSummary(@PathVariable Long id) {
         RatingSummaryResponse ratingSummary = profileService.getRatingSummaryForCaregiver(id);
         return ResponseEntity.ok(ratingSummary);
+    }
 
 
     @GetMapping("/user/{userId}/name")
