@@ -2,17 +2,18 @@ package id.ac.ui.cs.advprog.authprofile.repository;
 
 import id.ac.ui.cs.advprog.authprofile.config.TestConfig;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,7 +29,6 @@ class CareGiverRepositoryTest {
 
     @Autowired
     private CareGiverRepository careGiverRepository;
-
 
     @BeforeEach
     void setup() {
@@ -75,35 +75,9 @@ class CareGiverRepositoryTest {
     @Test
     void findByNameContainingIgnoreCase_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("smith@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Smith");
-        careGiver1.setNik("1111111111111111");
-        careGiver1.setAddress("Address 1");
-        careGiver1.setPhoneNumber("081111111111");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 1");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("johnson@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Johnson");
-        careGiver2.setNik("2222222222222222");
-        careGiver2.setAddress("Address 2");
-        careGiver2.setPhoneNumber("082222222222");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 2");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("smithson@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Smithson");
-        careGiver3.setNik("3333333333333333");
-        careGiver3.setAddress("Address 3");
-        careGiver3.setPhoneNumber("083333333333");
-        careGiver3.setSpeciality("Dermatology");
-        careGiver3.setWorkAddress("Hospital 3");
+        CareGiver careGiver1 = createCareGiver("smith@example.com", "Dr. Smith", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("johnson@example.com", "Dr. Johnson", "2222222222222222", "Neurology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("smithson@example.com", "Dr. Smithson", "3333333333333333", "Dermatology", "Hospital 3");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -129,35 +103,9 @@ class CareGiverRepositoryTest {
     @Test
     void findBySpecialityContainingIgnoreCase_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("cardio1@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Cardio One");
-        careGiver1.setNik("4444444444444444");
-        careGiver1.setAddress("Address 4");
-        careGiver1.setPhoneNumber("084444444444");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 4");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("neuro@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Neuro");
-        careGiver2.setNik("5555555555555555");
-        careGiver2.setAddress("Address 5");
-        careGiver2.setPhoneNumber("085555555555");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 5");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("cardio2@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Cardio Two");
-        careGiver3.setNik("6666666666666666");
-        careGiver3.setAddress("Address 6");
-        careGiver3.setPhoneNumber("086666666666");
-        careGiver3.setSpeciality("Cardiology");
-        careGiver3.setWorkAddress("Hospital 6");
+        CareGiver careGiver1 = createCareGiver("cardio1@example.com", "Dr. Cardio One", "4444444444444444", "Cardiology", "Hospital 4");
+        CareGiver careGiver2 = createCareGiver("neuro@example.com", "Dr. Neuro", "5555555555555555", "Neurology", "Hospital 5");
+        CareGiver careGiver3 = createCareGiver("cardio2@example.com", "Dr. Cardio Two", "6666666666666666", "Cardiology", "Hospital 6");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -187,35 +135,9 @@ class CareGiverRepositoryTest {
     @Test
     void findByNameAndSpeciality_ShouldReturnMatchingCareGivers() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("smith.cardio@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Dr. Smith");
-        careGiver1.setNik("7777777777777777");
-        careGiver1.setAddress("Address 7");
-        careGiver1.setPhoneNumber("087777777777");
-        careGiver1.setSpeciality("Cardiology");
-        careGiver1.setWorkAddress("Hospital 7");
-
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("smith.neuro@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Dr. Smith");
-        careGiver2.setNik("8888888888888888");
-        careGiver2.setAddress("Address 8");
-        careGiver2.setPhoneNumber("088888888888");
-        careGiver2.setSpeciality("Neurology");
-        careGiver2.setWorkAddress("Hospital 8");
-
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("johnson.cardio@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Dr. Johnson");
-        careGiver3.setNik("9999999999999999");
-        careGiver3.setAddress("Address 9");
-        careGiver3.setPhoneNumber("089999999999");
-        careGiver3.setSpeciality("Cardiology");
-        careGiver3.setWorkAddress("Hospital 9");
+        CareGiver careGiver1 = createCareGiver("smith.cardio@example.com", "Dr. Smith", "7777777777777777", "Cardiology", "Hospital 7");
+        CareGiver careGiver2 = createCareGiver("smith.neuro@example.com", "Dr. Smith", "8888888888888888", "Neurology", "Hospital 8");
+        CareGiver careGiver3 = createCareGiver("johnson.cardio@example.com", "Dr. Johnson", "9999999999999999", "Cardiology", "Hospital 9");
 
         entityManager.persistAndFlush(careGiver1);
         entityManager.persistAndFlush(careGiver2);
@@ -241,431 +163,265 @@ class CareGiverRepositoryTest {
     }
 
     @Test
-    void findByAvailableDayOfWeek_ShouldReturnCareGiversWithAvailableSchedule() {
+    void findCareGiversWithFilters_ShouldReturnFilteredResults() {
         // given
-        CareGiver careGiver1 = new CareGiver();
-        careGiver1.setEmail("monday.doc@example.com");
-        careGiver1.setPassword("password");
-        careGiver1.setName("Monday Doctor");
-        careGiver1.setNik("1010101010101010");
-        careGiver1.setAddress("Address 10");
-        careGiver1.setPhoneNumber("0810101010");
-        careGiver1.setSpeciality("General");
-        careGiver1.setWorkAddress("Hospital 10");
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+        CareGiver careGiver4 = createCareGiverWithRating("alice2@example.com", "Alice", "4444444444444444", "Dermatology", "Hospital 4", 4.0);
 
-        WorkingSchedule mondaySchedule = new WorkingSchedule();
-        mondaySchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        mondaySchedule.setStartTime(LocalTime.of(8, 0));
-        mondaySchedule.setEndTime(LocalTime.of(16, 0));
-        mondaySchedule.setAvailable(true);
-        careGiver1.addWorkingSchedule(mondaySchedule);
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.persist(careGiver4);
+        entityManager.flush();
 
-        CareGiver careGiver2 = new CareGiver();
-        careGiver2.setEmail("tuesday.doc@example.com");
-        careGiver2.setPassword("password");
-        careGiver2.setName("Tuesday Doctor");
-        careGiver2.setNik("2020202020202020");
-        careGiver2.setAddress("Address 20");
-        careGiver2.setPhoneNumber("0820202020");
-        careGiver2.setSpeciality("General");
-        careGiver2.setWorkAddress("Hospital 20");
+        // when & then
+        // Test case 1: both name and speciality provided
+        List<CareGiver> result1 = careGiverRepository.findCareGiversWithFilters("Ali", "Cardio");
+        assertThat(result1).hasSize(1);
+        assertThat(result1.get(0).getEmail()).isEqualTo("alice@example.com");
 
-        WorkingSchedule tuesdaySchedule = new WorkingSchedule();
-        tuesdaySchedule.setDayOfWeek(DayOfWeek.TUESDAY);
-        tuesdaySchedule.setStartTime(LocalTime.of(9, 0));
-        tuesdaySchedule.setEndTime(LocalTime.of(17, 0));
-        tuesdaySchedule.setAvailable(true);
-        careGiver2.addWorkingSchedule(tuesdaySchedule);
+        // Test case 2: name is null, speciality provided
+        List<CareGiver> result2 = careGiverRepository.findCareGiversWithFilters(null, "Cardiology");
+        assertThat(result2).hasSize(2);
+        assertThat(result2).extracting(CareGiver::getEmail)
+                .containsExactlyInAnyOrder("alice@example.com", "charlie@example.com");
 
-        // Doctor with unavailable Monday schedule
-        CareGiver careGiver3 = new CareGiver();
-        careGiver3.setEmail("busy.monday@example.com");
-        careGiver3.setPassword("password");
-        careGiver3.setName("Busy Monday Doctor");
-        careGiver3.setNik("3030303030303030");
-        careGiver3.setAddress("Address 30");
-        careGiver3.setPhoneNumber("0830303030");
-        careGiver3.setSpeciality("General");
-        careGiver3.setWorkAddress("Hospital 30");
+        // Test case 3: speciality is null, name provided
+        List<CareGiver> result3 = careGiverRepository.findCareGiversWithFilters("Bob", null);
+        assertThat(result3).hasSize(1);
+        assertThat(result3.get(0).getEmail()).isEqualTo("bob@example.com");
 
-        WorkingSchedule busyMondaySchedule = new WorkingSchedule();
-        busyMondaySchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        busyMondaySchedule.setStartTime(LocalTime.of(10, 0));
-        busyMondaySchedule.setEndTime(LocalTime.of(18, 0));
-        busyMondaySchedule.setAvailable(false);
-        careGiver3.addWorkingSchedule(busyMondaySchedule);
+        // Test case 4: both null
+        List<CareGiver> result4 = careGiverRepository.findCareGiversWithFilters(null, null);
+        assertThat(result4).hasSize(4);
+    }
 
+    // NEW TESTS FOR PAGINATED METHODS
+
+    @Test
+    void findByNameContainingIgnoreCaseWithPagination_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("alice2@example.com", "Alice Smith", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("bob@example.com", "Bob", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by name
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCase("Alice", pageable);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice2@example.com", "alice@example.com");
+    }
+
+    @Test
+    void findBySpecialityContainingIgnoreCaseWithPagination_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 2, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by speciality
+        Page<CareGiver> result = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageable);
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+        assertThat(result.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice@example.com", "charlie@example.com");
+    }
+
+    @Test
+    void findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase_ShouldReturnPagedResults() {
+        // given
+        CareGiver careGiver1 = createCareGiverWithRating("alice.cardio@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("alice.neuro@example.com", "Alice", "2222222222222222", "Neurology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("bob.cardio@example.com", "Bob", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "averageRating"));
+
+        // Test paginated search by both name and speciality
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                "Alice", "Cardiology", pageable);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).getEmail()).isEqualTo("alice.cardio@example.com");
+    }
+
+    @Test
+    void findNameSuggestions_ShouldReturnDistinctNamesContainingPrefix() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("alice2@example.com", "alice", "2222222222222222", "Cardiology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("bob@example.com", "Bob", "3333333333333333", "Neurology", "Hospital 3");
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        List<String> suggestionsA = careGiverRepository.findNameSuggestions("A");
+        assertThat(suggestionsA).containsExactlyInAnyOrder("Alice", "alice");
+
+        List<String> suggestionsLowerA = careGiverRepository.findNameSuggestions("a");
+        assertThat(suggestionsLowerA).containsExactlyInAnyOrder("Alice", "alice");
+
+        List<String> suggestionsB = careGiverRepository.findNameSuggestions("B");
+        assertThat(suggestionsB).containsExactly("Bob");
+
+        List<String> suggestionsZ = careGiverRepository.findNameSuggestions("Z");
+        assertThat(suggestionsZ).isEmpty();
+    }
+
+    @Test
+    void findSpecialitySuggestions_ShouldReturnDistinctSpecialitiesContainingQuery() {
+        // given
+        CareGiver careGiver1 = createCareGiver("cardio@example.com", "Dr. Cardio", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("neuro@example.com", "Dr. Neuro", "2222222222222222", "Neurology", "Hospital 2");
+        CareGiver careGiver3 = createCareGiver("cardio2@example.com", "Dr. Cardio2", "3333333333333333", "cardio", "Hospital 3");
+
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
+
+        // when & then
+        List<String> suggestionsCard = careGiverRepository.findSpecialitySuggestions("card");
+        assertThat(suggestionsCard).containsExactlyInAnyOrder("Cardiology", "cardio");
+
+        List<String> suggestionsNeuro = careGiverRepository.findSpecialitySuggestions("neuro");
+        assertThat(suggestionsNeuro).containsExactly("Neurology");
+
+        List<String> suggestionsLogy = careGiverRepository.findSpecialitySuggestions("logy");
+        assertThat(suggestionsLogy).containsExactlyInAnyOrder("Cardiology", "Neurology");
+
+        List<String> suggestionsNone = careGiverRepository.findSpecialitySuggestions("nonexistent");
+        assertThat(suggestionsNone).isEmpty();
+    }
+
+    // ADDITIONAL TESTS FOR EDGE CASES
+
+    @Test
+    void findCareGiversWithFilters_WithEmptyResults_ShouldReturnEmptyList() {
+        // given
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
         entityManager.persistAndFlush(careGiver1);
-        entityManager.persistAndFlush(careGiver2);
-        entityManager.persistAndFlush(careGiver3);
 
         // when
-        List<CareGiver> foundByMonday = careGiverRepository.findByAvailableDayOfWeek(DayOfWeek.MONDAY);
-        List<CareGiver> foundByTuesday = careGiverRepository.findByAvailableDayOfWeek(DayOfWeek.TUESDAY);
-        List<CareGiver> foundByWednesday = careGiverRepository.findByAvailableDayOfWeek(DayOfWeek.WEDNESDAY);
+        List<CareGiver> result = careGiverRepository.findCareGiversWithFilters("NonExistent", "NonExistent");
 
         // then
-        assertThat(foundByMonday).hasSize(1);
-        assertThat(foundByMonday.get(0).getEmail()).isEqualTo("monday.doc@example.com");
-
-        assertThat(foundByTuesday).hasSize(1);
-        assertThat(foundByTuesday.get(0).getEmail()).isEqualTo("tuesday.doc@example.com");
-
-        assertThat(foundByWednesday).isEmpty();
+        assertThat(result).isEmpty();
     }
 
     @Test
-    void findByAvailableDayAndTime_ShouldReturnCareGiversAvailableAtSpecificTime() {
+    void findByNameContainingIgnoreCase_WithPagination_ShouldHandleLargePageSize() {
         // given
-        // Doctor available Monday morning
-        CareGiver morningDoctor = new CareGiver();
-        morningDoctor.setEmail("morning.doc@example.com");
-        morningDoctor.setPassword("password");
-        morningDoctor.setName("Morning Doctor");
-        morningDoctor.setNik("1111222233334444");
-        morningDoctor.setAddress("Morning Address");
-        morningDoctor.setPhoneNumber("0811223344");
-        morningDoctor.setSpeciality("General");
-        morningDoctor.setWorkAddress("Morning Hospital");
-
-        WorkingSchedule morningSchedule = new WorkingSchedule();
-        morningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        morningSchedule.setStartTime(LocalTime.of(8, 0));
-        morningSchedule.setEndTime(LocalTime.of(12, 0));
-        morningSchedule.setAvailable(true);
-        morningDoctor.addWorkingSchedule(morningSchedule);
-
-        // Doctor available Monday afternoon
-        CareGiver afternoonDoctor = new CareGiver();
-        afternoonDoctor.setEmail("afternoon.doc@example.com");
-        afternoonDoctor.setPassword("password");
-        afternoonDoctor.setName("Afternoon Doctor");
-        afternoonDoctor.setNik("5555666677778888");
-        afternoonDoctor.setAddress("Afternoon Address");
-        afternoonDoctor.setPhoneNumber("0855667788");
-        afternoonDoctor.setSpeciality("General");
-        afternoonDoctor.setWorkAddress("Afternoon Hospital");
-
-        WorkingSchedule afternoonSchedule = new WorkingSchedule();
-        afternoonSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        afternoonSchedule.setStartTime(LocalTime.of(13, 0));
-        afternoonSchedule.setEndTime(LocalTime.of(17, 0));
-        afternoonSchedule.setAvailable(true);
-        afternoonDoctor.addWorkingSchedule(afternoonSchedule);
-
-        // Doctor available Tuesday all day
-        CareGiver tuesdayDoctor = new CareGiver();
-        tuesdayDoctor.setEmail("tuesday.all.day@example.com");
-        tuesdayDoctor.setPassword("password");
-        tuesdayDoctor.setName("Tuesday All Day");
-        tuesdayDoctor.setNik("9999000011112222");
-        tuesdayDoctor.setAddress("Tuesday Address");
-        tuesdayDoctor.setPhoneNumber("0899001122");
-        tuesdayDoctor.setSpeciality("General");
-        tuesdayDoctor.setWorkAddress("Tuesday Hospital");
-
-        WorkingSchedule tuesdaySchedule = new WorkingSchedule();
-        tuesdaySchedule.setDayOfWeek(DayOfWeek.TUESDAY);
-        tuesdaySchedule.setStartTime(LocalTime.of(8, 0));
-        tuesdaySchedule.setEndTime(LocalTime.of(17, 0));
-        tuesdaySchedule.setAvailable(true);
-        tuesdayDoctor.addWorkingSchedule(tuesdaySchedule);
-
-        entityManager.persistAndFlush(morningDoctor);
-        entityManager.persistAndFlush(afternoonDoctor);
-        entityManager.persistAndFlush(tuesdayDoctor);
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("bob@example.com", "Bob", "2222222222222222", "Neurology", "Hospital 2");
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.flush();
 
         // when
-        List<CareGiver> foundMondayMorning = careGiverRepository.findByAvailableDayAndTime(
-                DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> foundMondayAfternoon = careGiverRepository.findByAvailableDayAndTime(
-                DayOfWeek.MONDAY, LocalTime.of(15, 0));
-        List<CareGiver> foundMondayLunchtime = careGiverRepository.findByAvailableDayAndTime(
-                DayOfWeek.MONDAY, LocalTime.of(12, 30));
-        List<CareGiver> foundTuesdayMorning = careGiverRepository.findByAvailableDayAndTime(
-                DayOfWeek.TUESDAY, LocalTime.of(9, 0));
+        Pageable pageable = PageRequest.of(0, 100);
+        Page<CareGiver> result = careGiverRepository.findByNameContainingIgnoreCase("", pageable);
 
         // then
-        assertThat(foundMondayMorning).hasSize(1);
-        assertThat(foundMondayMorning.get(0).getEmail()).isEqualTo("morning.doc@example.com");
-
-        assertThat(foundMondayAfternoon).hasSize(1);
-        assertThat(foundMondayAfternoon.get(0).getEmail()).isEqualTo("afternoon.doc@example.com");
-
-        assertThat(foundMondayLunchtime).isEmpty();
-
-        assertThat(foundTuesdayMorning).hasSize(1);
-        assertThat(foundTuesdayMorning.get(0).getEmail()).isEqualTo("tuesday.all.day@example.com");
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
     }
 
     @Test
-    void findByNameAndAvailableDayAndTime_ShouldFilterByNameAndSchedule() {
+    void findBySpecialityContainingIgnoreCase_WithDifferentSortOrders_ShouldReturnSortedResults() {
         // given
-        // Set up two doctors with the same name but different schedules
-        CareGiver smithMorning = new CareGiver();
-        smithMorning.setEmail("smith.morning@example.com");
-        smithMorning.setPassword("password");
-        smithMorning.setName("Dr. Smith");
-        smithMorning.setNik("1212121212121212");
-        smithMorning.setAddress("Smith Morning Address");
-        smithMorning.setPhoneNumber("0812121212");
-        smithMorning.setSpeciality("General");
-        smithMorning.setWorkAddress("Smith Morning Hospital");
+        CareGiver careGiver1 = createCareGiverWithRating("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1", 4.5);
+        CareGiver careGiver2 = createCareGiverWithRating("bob@example.com", "Bob", "2222222222222222", "Cardiology", "Hospital 2", 4.8);
+        CareGiver careGiver3 = createCareGiverWithRating("charlie@example.com", "Charlie", "3333333333333333", "Cardiology", "Hospital 3", 4.2);
 
-        WorkingSchedule smithMorningSchedule = new WorkingSchedule();
-        smithMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        smithMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        smithMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        smithMorningSchedule.setAvailable(true);
-        smithMorning.addWorkingSchedule(smithMorningSchedule);
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.persist(careGiver3);
+        entityManager.flush();
 
-        CareGiver smithAfternoon = new CareGiver();
-        smithAfternoon.setEmail("smith.afternoon@example.com");
-        smithAfternoon.setPassword("password");
-        smithAfternoon.setName("Dr. Smith");
-        smithAfternoon.setNik("3434343434343434");
-        smithAfternoon.setAddress("Smith Afternoon Address");
-        smithAfternoon.setPhoneNumber("0834343434");
-        smithAfternoon.setSpeciality("General");
-        smithAfternoon.setWorkAddress("Smith Afternoon Hospital");
+        // when & then
+        // Test sorting by rating descending
+        Pageable pageableRatingDesc = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "averageRating"));
+        Page<CareGiver> resultRatingDesc = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageableRatingDesc);
+        assertThat(resultRatingDesc.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("bob@example.com", "alice@example.com", "charlie@example.com");
 
-        WorkingSchedule smithAfternoonSchedule = new WorkingSchedule();
-        smithAfternoonSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        smithAfternoonSchedule.setStartTime(LocalTime.of(13, 0));
-        smithAfternoonSchedule.setEndTime(LocalTime.of(17, 0));
-        smithAfternoonSchedule.setAvailable(true);
-        smithAfternoon.addWorkingSchedule(smithAfternoonSchedule);
-
-        // Different name doctor
-        CareGiver johnsonMorning = new CareGiver();
-        johnsonMorning.setEmail("johnson.morning@example.com");
-        johnsonMorning.setPassword("password");
-        johnsonMorning.setName("Dr. Johnson");
-        johnsonMorning.setNik("5656565656565656");
-        johnsonMorning.setAddress("Johnson Morning Address");
-        johnsonMorning.setPhoneNumber("0856565656");
-        johnsonMorning.setSpeciality("General");
-        johnsonMorning.setWorkAddress("Johnson Morning Hospital");
-
-        WorkingSchedule johnsonMorningSchedule = new WorkingSchedule();
-        johnsonMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        johnsonMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        johnsonMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        johnsonMorningSchedule.setAvailable(true);
-        johnsonMorning.addWorkingSchedule(johnsonMorningSchedule);
-
-        entityManager.persistAndFlush(smithMorning);
-        entityManager.persistAndFlush(smithAfternoon);
-        entityManager.persistAndFlush(johnsonMorning);
-
-        // when
-        List<CareGiver> smithMondayMorning = careGiverRepository.findByNameAndAvailableDayAndTime(
-                "Smith", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> smithMondayAfternoon = careGiverRepository.findByNameAndAvailableDayAndTime(
-                "Smith", DayOfWeek.MONDAY, LocalTime.of(15, 0));
-        List<CareGiver> johnsonMondayMorning = careGiverRepository.findByNameAndAvailableDayAndTime(
-                "Johnson", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> nonexistentDoctor = careGiverRepository.findByNameAndAvailableDayAndTime(
-                "Nonexistent", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-
-        // then
-        assertThat(smithMondayMorning).hasSize(1);
-        assertThat(smithMondayMorning.get(0).getEmail()).isEqualTo("smith.morning@example.com");
-
-        assertThat(smithMondayAfternoon).hasSize(1);
-        assertThat(smithMondayAfternoon.get(0).getEmail()).isEqualTo("smith.afternoon@example.com");
-
-        assertThat(johnsonMondayMorning).hasSize(1);
-        assertThat(johnsonMondayMorning.get(0).getEmail()).isEqualTo("johnson.morning@example.com");
-
-        assertThat(nonexistentDoctor).isEmpty();
+        // Test sorting by name ascending
+        Pageable pageableNameAsc = PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "name"));
+        Page<CareGiver> resultNameAsc = careGiverRepository.findBySpecialityContainingIgnoreCase("Cardiology", pageableNameAsc);
+        assertThat(resultNameAsc.getContent()).extracting(CareGiver::getEmail)
+                .containsExactly("alice@example.com", "bob@example.com", "charlie@example.com");
     }
 
     @Test
-    void findBySpecialityAndAvailableDayAndTime_ShouldFilterBySpecialityAndSchedule() {
+    void findCareGiversWithFilters_WithCaseInsensitiveFilters_ShouldReturnMatchingResults() {
         // given
-        // Set up two doctors with the same speciality but different schedules
-        CareGiver cardioMorning = new CareGiver();
-        cardioMorning.setEmail("cardio.morning@example.com");
-        cardioMorning.setPassword("password");
-        cardioMorning.setName("Morning Cardiologist");
-        cardioMorning.setNik("7878787878787878");
-        cardioMorning.setAddress("Cardio Morning Address");
-        cardioMorning.setPhoneNumber("0878787878");
-        cardioMorning.setSpeciality("Cardiology");
-        cardioMorning.setWorkAddress("Cardio Morning Hospital");
+        CareGiver careGiver1 = createCareGiver("alice@example.com", "Alice", "1111111111111111", "Cardiology", "Hospital 1");
+        CareGiver careGiver2 = createCareGiver("bob@example.com", "BOB", "2222222222222222", "cardiology", "Hospital 2");
 
-        WorkingSchedule cardioMorningSchedule = new WorkingSchedule();
-        cardioMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        cardioMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        cardioMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        cardioMorningSchedule.setAvailable(true);
-        cardioMorning.addWorkingSchedule(cardioMorningSchedule);
+        entityManager.persist(careGiver1);
+        entityManager.persist(careGiver2);
+        entityManager.flush();
 
-        CareGiver cardioAfternoon = new CareGiver();
-        cardioAfternoon.setEmail("cardio.afternoon@example.com");
-        cardioAfternoon.setPassword("password");
-        cardioAfternoon.setName("Afternoon Cardiologist");
-        cardioAfternoon.setNik("9090909090909090");
-        cardioAfternoon.setAddress("Cardio Afternoon Address");
-        cardioAfternoon.setPhoneNumber("0890909090");
-        cardioAfternoon.setSpeciality("Cardiology");
-        cardioAfternoon.setWorkAddress("Cardio Afternoon Hospital");
+        // when & then
+        // Test case insensitive name filter
+        List<CareGiver> resultName = careGiverRepository.findCareGiversWithFilters("alice", null);
+        assertThat(resultName).hasSize(1);
+        assertThat(resultName.get(0).getEmail()).isEqualTo("alice@example.com");
 
-        WorkingSchedule cardioAfternoonSchedule = new WorkingSchedule();
-        cardioAfternoonSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        cardioAfternoonSchedule.setStartTime(LocalTime.of(13, 0));
-        cardioAfternoonSchedule.setEndTime(LocalTime.of(17, 0));
-        cardioAfternoonSchedule.setAvailable(true);
-        cardioAfternoon.addWorkingSchedule(cardioAfternoonSchedule);
-
-        // Different speciality doctor
-        CareGiver neuroMorning = new CareGiver();
-        neuroMorning.setEmail("neuro.morning@example.com");
-        neuroMorning.setPassword("password");
-        neuroMorning.setName("Morning Neurologist");
-        neuroMorning.setNik("1231231231231231");
-        neuroMorning.setAddress("Neuro Morning Address");
-        neuroMorning.setPhoneNumber("0812312312");
-        neuroMorning.setSpeciality("Neurology");
-        neuroMorning.setWorkAddress("Neuro Morning Hospital");
-
-        WorkingSchedule neuroMorningSchedule = new WorkingSchedule();
-        neuroMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        neuroMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        neuroMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        neuroMorningSchedule.setAvailable(true);
-        neuroMorning.addWorkingSchedule(neuroMorningSchedule);
-
-        entityManager.persistAndFlush(cardioMorning);
-        entityManager.persistAndFlush(cardioAfternoon);
-        entityManager.persistAndFlush(neuroMorning);
-
-        // when
-        List<CareGiver> cardioMondayMorning = careGiverRepository.findBySpecialityAndAvailableDayAndTime(
-                "Cardio", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> cardioMondayAfternoon = careGiverRepository.findBySpecialityAndAvailableDayAndTime(
-                "Cardio", DayOfWeek.MONDAY, LocalTime.of(15, 0));
-        List<CareGiver> neuroMondayMorning = careGiverRepository.findBySpecialityAndAvailableDayAndTime(
-                "Neuro", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> nonexistentSpeciality = careGiverRepository.findBySpecialityAndAvailableDayAndTime(
-                "Nonexistent", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-
-        // then
-        assertThat(cardioMondayMorning).hasSize(1);
-        assertThat(cardioMondayMorning.get(0).getEmail()).isEqualTo("cardio.morning@example.com");
-
-        assertThat(cardioMondayAfternoon).hasSize(1);
-        assertThat(cardioMondayAfternoon.get(0).getEmail()).isEqualTo("cardio.afternoon@example.com");
-
-        assertThat(neuroMondayMorning).hasSize(1);
-        assertThat(neuroMondayMorning.get(0).getEmail()).isEqualTo("neuro.morning@example.com");
-
-        assertThat(nonexistentSpeciality).isEmpty();
+        // Test case insensitive speciality filter
+        List<CareGiver> resultSpeciality = careGiverRepository.findCareGiversWithFilters(null, "CARDIOLOGY");
+        assertThat(resultSpeciality).hasSize(2);
     }
 
-    @Test
-    void findByNameAndSpecialityAndAvailableDayAndTime_ShouldFilterByNameSpecialityAndSchedule() {
-        // given
-        // Set up doctors with different combinations of name and speciality
-        CareGiver smithCardioMorning = new CareGiver();
-        smithCardioMorning.setEmail("smith.cardio.morning@example.com");
-        smithCardioMorning.setPassword("password");
-        smithCardioMorning.setName("Dr. Smith");
-        smithCardioMorning.setNik("4545454545454545");
-        smithCardioMorning.setAddress("Smith Cardio Morning Address");
-        smithCardioMorning.setPhoneNumber("0845454545");
-        smithCardioMorning.setSpeciality("Cardiology");
-        smithCardioMorning.setWorkAddress("Smith Cardio Morning Hospital");
+    // Helper methods
+    private CareGiver createCareGiver(String email, String name, String nik, String speciality, String workAddress) {
+        CareGiver careGiver = new CareGiver();
+        careGiver.setEmail(email);
+        careGiver.setPassword("password");
+        careGiver.setName(name);
+        careGiver.setNik(nik);
+        careGiver.setAddress("Address for " + name);
+        careGiver.setPhoneNumber("08" + nik.substring(0, 10));
+        careGiver.setSpeciality(speciality);
+        careGiver.setWorkAddress(workAddress);
+        return careGiver;
+    }
 
-        WorkingSchedule smithCardioMorningSchedule = new WorkingSchedule();
-        smithCardioMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        smithCardioMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        smithCardioMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        smithCardioMorningSchedule.setAvailable(true);
-        smithCardioMorning.addWorkingSchedule(smithCardioMorningSchedule);
-
-        CareGiver smithNeuroMorning = new CareGiver();
-        smithNeuroMorning.setEmail("smith.neuro.morning@example.com");
-        smithNeuroMorning.setPassword("password");
-        smithNeuroMorning.setName("Dr. Smith");
-        smithNeuroMorning.setNik("6767676767676767");
-        smithNeuroMorning.setAddress("Smith Neuro Morning Address");
-        smithNeuroMorning.setPhoneNumber("0867676767");
-        smithNeuroMorning.setSpeciality("Neurology");
-        smithNeuroMorning.setWorkAddress("Smith Neuro Morning Hospital");
-
-        WorkingSchedule smithNeuroMorningSchedule = new WorkingSchedule();
-        smithNeuroMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        smithNeuroMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        smithNeuroMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        smithNeuroMorningSchedule.setAvailable(true);
-        smithNeuroMorning.addWorkingSchedule(smithNeuroMorningSchedule);
-
-        CareGiver johnsonCardioMorning = new CareGiver();
-        johnsonCardioMorning.setEmail("johnson.cardio.morning@example.com");
-        johnsonCardioMorning.setPassword("password");
-        johnsonCardioMorning.setName("Dr. Johnson");
-        johnsonCardioMorning.setNik("8989898989898989");
-        johnsonCardioMorning.setAddress("Johnson Cardio Morning Address");
-        johnsonCardioMorning.setPhoneNumber("0889898989");
-        johnsonCardioMorning.setSpeciality("Cardiology");
-        johnsonCardioMorning.setWorkAddress("Johnson Cardio Morning Hospital");
-
-        WorkingSchedule johnsonCardioMorningSchedule = new WorkingSchedule();
-        johnsonCardioMorningSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        johnsonCardioMorningSchedule.setStartTime(LocalTime.of(8, 0));
-        johnsonCardioMorningSchedule.setEndTime(LocalTime.of(12, 0));
-        johnsonCardioMorningSchedule.setAvailable(true);
-        johnsonCardioMorning.addWorkingSchedule(johnsonCardioMorningSchedule);
-
-        CareGiver smithCardioAfternoon = new CareGiver();
-        smithCardioAfternoon.setEmail("smith.cardio.afternoon@example.com");
-        smithCardioAfternoon.setPassword("password");
-        smithCardioAfternoon.setName("Dr. Smith");
-        smithCardioAfternoon.setNik("0101010101010101");
-        smithCardioAfternoon.setAddress("Smith Cardio Afternoon Address");
-        smithCardioAfternoon.setPhoneNumber("0801010101");
-        smithCardioAfternoon.setSpeciality("Cardiology");
-        smithCardioAfternoon.setWorkAddress("Smith Cardio Afternoon Hospital");
-
-        WorkingSchedule smithCardioAfternoonSchedule = new WorkingSchedule();
-        smithCardioAfternoonSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        smithCardioAfternoonSchedule.setStartTime(LocalTime.of(13, 0));
-        smithCardioAfternoonSchedule.setEndTime(LocalTime.of(17, 0));
-        smithCardioAfternoonSchedule.setAvailable(true);
-        smithCardioAfternoon.addWorkingSchedule(smithCardioAfternoonSchedule);
-
-        entityManager.persistAndFlush(smithCardioMorning);
-        entityManager.persistAndFlush(smithNeuroMorning);
-        entityManager.persistAndFlush(johnsonCardioMorning);
-        entityManager.persistAndFlush(smithCardioAfternoon);
-
-        // when
-        List<CareGiver> smithCardioMorningResults = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(
-                "Smith", "Cardio", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> smithNeuroMorningResults = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(
-                "Smith", "Neuro", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> johnsonCardioMorningResults = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(
-                "Johnson", "Cardio", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-        List<CareGiver> smithCardioAfternoonResults = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(
-                "Smith", "Cardio", DayOfWeek.MONDAY, LocalTime.of(15, 0));
-        List<CareGiver> nonexistentResults = careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(
-                "Nonexistent", "Nonexistent", DayOfWeek.MONDAY, LocalTime.of(10, 0));
-
-        // then
-        assertThat(smithCardioMorningResults).hasSize(1);
-        assertThat(smithCardioMorningResults.get(0).getEmail()).isEqualTo("smith.cardio.morning@example.com");
-
-        assertThat(smithNeuroMorningResults).hasSize(1);
-        assertThat(smithNeuroMorningResults.get(0).getEmail()).isEqualTo("smith.neuro.morning@example.com");
-
-        assertThat(johnsonCardioMorningResults).hasSize(1);
-        assertThat(johnsonCardioMorningResults.get(0).getEmail()).isEqualTo("johnson.cardio.morning@example.com");
-
-        assertThat(smithCardioAfternoonResults).hasSize(1);
-        assertThat(smithCardioAfternoonResults.get(0).getEmail()).isEqualTo("smith.cardio.afternoon@example.com");
-
-        assertThat(nonexistentResults).isEmpty();
+    private CareGiver createCareGiverWithRating(String email, String name, String nik, String speciality, String workAddress, Double rating) {
+        CareGiver careGiver = createCareGiver(email, name, nik, speciality, workAddress);
+        careGiver.setAverageRating(rating);
+        careGiver.setRatingCount(10); // Default rating count
+        return careGiver;
     }
 }

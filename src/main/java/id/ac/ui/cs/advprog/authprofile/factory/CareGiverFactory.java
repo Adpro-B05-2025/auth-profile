@@ -5,7 +5,6 @@ import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -43,19 +42,6 @@ public class CareGiverFactory implements UserFactory {
                 careGiverRequest.getSpeciality(),
                 careGiverRequest.getWorkAddress()
         );
-
-        // Add working schedules if provided
-        if (careGiverRequest.getWorkingSchedules() != null) {
-            for (RegisterCareGiverRequest.WorkingScheduleRequest scheduleRequest : careGiverRequest.getWorkingSchedules()) {
-                WorkingSchedule schedule = new WorkingSchedule(
-                        scheduleRequest.getDayOfWeek(),
-                        scheduleRequest.getStartTime(),
-                        scheduleRequest.getEndTime(),
-                        careGiver
-                );
-                careGiver.addWorkingSchedule(schedule);
-            }
-        }
 
         // Set CareGiver role
         Set<Role> roles = new HashSet<>();

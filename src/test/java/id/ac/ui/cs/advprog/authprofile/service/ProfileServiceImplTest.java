@@ -1,5 +1,6 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
@@ -7,11 +8,13 @@ import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -20,24 +23,25 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.lang.reflect.Method;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,6 +62,27 @@ class ProfileServiceImplTest {
     @Mock
     private CareGiverRepository careGiverRepository;
 
+    @Mock
+    private MonitoringConfig monitoringConfig;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter searchRequests;
+
+    @Mock
+    private Counter profileUpdates;
+
+    @Mock
+    private AtomicInteger activeSessions;
+
+    @Mock
+    private Timer timer;
+
+    @Mock
+    private Timer.Sample timerSample;
+
     @InjectMocks
     private ProfileServiceImpl profileServiceImpl;
 
@@ -76,10 +101,12 @@ class ProfileServiceImplTest {
     private CareGiver careGiver2;
     private UpdateProfileRequest updateRequest;
     private List<CareGiver> careGivers;
-    private WorkingSchedule workingSchedule;
 
     @BeforeEach
     void setUp() {
+        // Setup monitoring mocks first
+        setupMonitoringMocks();
+
         // Setup test data
         Set<Role> roles = new HashSet<>();
         Role role = new Role();
@@ -122,19 +149,6 @@ class ProfileServiceImplTest {
         doctorRoles.add(doctorRole);
         careGiver.setRoles(doctorRoles);
 
-        // Add working schedule
-        workingSchedule = new WorkingSchedule();
-        workingSchedule.setId(1L);
-        workingSchedule.setDayOfWeek(DayOfWeek.MONDAY);
-        workingSchedule.setStartTime(LocalTime.of(9, 0));
-        workingSchedule.setEndTime(LocalTime.of(17, 0));
-        workingSchedule.setAvailable(true);
-        workingSchedule.setCareGiver(careGiver);
-
-        List<WorkingSchedule> schedules = new ArrayList<>();
-        schedules.add(workingSchedule);
-        careGiver.setWorkingSchedules(schedules);
-
         // Create a second caregiver for testing multiple results
         careGiver2 = new CareGiver();
         careGiver2.setId(4L);
@@ -147,7 +161,6 @@ class ProfileServiceImplTest {
         careGiver2.setWorkAddress("City Hospital");
         careGiver2.setAverageRating(4.8);
         careGiver2.setRoles(doctorRoles);
-        careGiver2.setWorkingSchedules(new ArrayList<>());
 
         careGivers = new ArrayList<>();
         careGivers.add(careGiver);
@@ -162,7 +175,34 @@ class ProfileServiceImplTest {
         updateRequest.setWorkAddress("Updated work address");
 
         SecurityContextHolder.clearContext();
+    }
 
+    private void setupMonitoringMocks() {
+        // Setup MonitoringConfig method returns
+        lenient().when(monitoringConfig.getSearchRequests()).thenReturn(searchRequests);
+        lenient().when(monitoringConfig.getProfileUpdates()).thenReturn(profileUpdates);
+        lenient().when(monitoringConfig.getActiveSessions()).thenReturn(activeSessions);
+
+        // Use ReflectionTestUtils to set the meterRegistry field
+        ReflectionTestUtils.setField(monitoringConfig, "meterRegistry", meterRegistry);
+
+        // Setup MeterRegistry behavior
+        lenient().when(meterRegistry.timer(anyString(), anyString(), anyString())).thenReturn(timer);
+        lenient().when(meterRegistry.timer(anyString())).thenReturn(timer);
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(searchRequests);
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(searchRequests);
+
+        // Setup Counter behavior
+        lenient().doNothing().when(searchRequests).increment();
+        lenient().doNothing().when(searchRequests).increment(anyLong());
+        lenient().doNothing().when(profileUpdates).increment();
+
+        // Setup AtomicInteger behavior
+        lenient().when(activeSessions.decrementAndGet()).thenReturn(0);
+        lenient().when(activeSessions.get()).thenReturn(1);
+
+        // Setup Timer.Sample behavior
+        lenient().when(timerSample.stop(any(Timer.class))).thenReturn(1L);
     }
 
     @AfterEach
@@ -176,7 +216,6 @@ class ProfileServiceImplTest {
         SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
 
         // Configure authentication with lenient stubbings
-        // This avoids UnnecessaryStubbingException when not all of these are used in every test
         lenient().when(authentication.isAuthenticated()).thenReturn(true);
         lenient().when(authentication.getPrincipal()).thenReturn(userDetails);
         lenient().when(userDetails.getUsername()).thenReturn(user.getId().toString());
@@ -224,7 +263,6 @@ class ProfileServiceImplTest {
 
         verify(userRepository).findById(1L);
     }
-
 
     @Test
     void getUserProfile_ShouldReturnProfileResponse() {
@@ -278,14 +316,19 @@ class ProfileServiceImplTest {
         // given
         when(careGiverRepository.findByNameAndSpeciality("test", "general")).thenReturn(Arrays.asList(careGiver));
 
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", "general");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getName()).isEqualTo("Dr. Test");
+            // when
+            List<ProfileResponse> responses = profileServiceImpl.searchCareGivers("test", "general");
 
-        verify(careGiverRepository).findByNameAndSpeciality("test", "general");
+            // then
+            assertThat(responses).hasSize(1);
+            assertThat(responses.get(0).getName()).isEqualTo("Dr. Test");
+
+            verify(careGiverRepository).findByNameAndSpeciality("test", "general");
+        }
     }
 
     @Test
@@ -334,8 +377,6 @@ class ProfileServiceImplTest {
         verify(careGiverRepository).findAll();
     }
 
-
-
     @Test
     void updateCurrentUserProfile_ForPacillian_ShouldReturnUpdatedProfile() {
         // Set up security context
@@ -356,23 +397,28 @@ class ProfileServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(pacillian));
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
 
-        // Execute method
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify response
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getAddress()).isEqualTo("Updated Address");
-        assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
-        assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
+            // Execute method
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // Verify calls
-        verify(userRepository, times(1)).findById(1L);
-        verify(pacillianRepository).save(any(Pacillian.class));
-        verify(pacillianRepository).flush();
+            // Verify response
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
+            assertThat(response.getAddress()).isEqualTo("Updated Address");
+            assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
+            assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
 
-        // Since we're not changing the email, this shouldn't be called
-        verify(userRepository, never()).existsByEmail(any());
+            // Verify calls
+            verify(userRepository, times(1)).findById(1L);
+            verify(pacillianRepository).save(any(Pacillian.class));
+            verify(pacillianRepository).flush();
+
+            // Since we're not changing the email, this shouldn't be called
+            verify(userRepository, never()).existsByEmail(any());
+        }
     }
 
     @Test
@@ -391,21 +437,26 @@ class ProfileServiceImplTest {
         // Setup the update request with a new email
         updateRequest.setEmail("new.email@example.com");
 
-        // when
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // then
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getAddress()).isEqualTo("Updated Address");
-        assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
+            // when
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // Verify findById was called twice (since we're changing email)
-        verify(userRepository, times(2)).findById(1L);
-        verify(userRepository).existsByEmail("new.email@example.com");
-        verify(userRepository).save(any(User.class));
-        verify(pacillianRepository, never()).save(any(Pacillian.class));
-        verify(careGiverRepository, never()).save(any(CareGiver.class));
+            // then
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
+            assertThat(response.getAddress()).isEqualTo("Updated Address");
+            assertThat(response.getPhoneNumber()).isEqualTo("089876543210");
+
+            // Verify findById was called twice (since we're changing email)
+            verify(userRepository, times(2)).findById(1L);
+            verify(userRepository).existsByEmail("new.email@example.com");
+            verify(userRepository).save(any(User.class));
+            verify(pacillianRepository, never()).save(any(Pacillian.class));
+            verify(careGiverRepository, never()).save(any(CareGiver.class));
+        }
     }
 
     @Test
@@ -416,12 +467,17 @@ class ProfileServiceImplTest {
         // Set up repository mock for ID-based lookup
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        // Execute the method
-        profileServiceImpl.deleteCurrentUserAccount();
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify the repository calls - now using findById
-        verify(userRepository).findById(1L);
-        verify(userRepository).delete(user);
+            // Execute the method
+            profileServiceImpl.deleteCurrentUserAccount();
+
+            // Verify the repository calls - now using findById
+            verify(userRepository).findById(1L);
+            verify(userRepository).delete(user);
+        }
     }
 
     @Test
@@ -432,13 +488,18 @@ class ProfileServiceImplTest {
         // Set up repository mock for ID-based lookup
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // Execute and verify exception
-        assertThatThrownBy(() -> profileServiceImpl.deleteCurrentUserAccount())
-                .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("User not found");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).findById(1L);
-        verify(userRepository, never()).delete(any(User.class));
+            // Execute and verify exception
+            assertThatThrownBy(() -> profileServiceImpl.deleteCurrentUserAccount())
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .hasMessageContaining("User not found");
+
+            verify(userRepository).findById(1L);
+            verify(userRepository, never()).delete(any(User.class));
+        }
     }
 
     @Test
@@ -449,16 +510,21 @@ class ProfileServiceImplTest {
         // given - now using findById instead of findByEmail
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // when/then
-        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
-                .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("User not found");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).findById(1L);
-        // Verify that no save methods are called
-        verify(userRepository, never()).save(any(User.class));
-        verify(pacillianRepository, never()).save(any(Pacillian.class));
-        verify(careGiverRepository, never()).save(any(CareGiver.class));
+            // when/then
+            assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .hasMessageContaining("User not found");
+
+            verify(userRepository).findById(1L);
+            // Verify that no save methods are called
+            verify(userRepository, never()).save(any(User.class));
+            verify(pacillianRepository, never()).save(any(Pacillian.class));
+            verify(careGiverRepository, never()).save(any(CareGiver.class));
+        }
     }
 
     // New tests for the getAllCareGiversLite method
@@ -487,20 +553,11 @@ class ProfileServiceImplTest {
         assertThat(firstResponse.getNik()).isNull();
         assertThat(firstResponse.getAddress()).isNull();
 
-        // Verify working schedules
-        assertThat(firstResponse.getWorkingSchedules()).hasSize(1);
-        assertThat(firstResponse.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        assertThat(firstResponse.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(9, 0));
-        assertThat(firstResponse.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(17, 0));
-        assertThat(firstResponse.getWorkingSchedules().get(0).isAvailable()).isEqualTo(true);
-
         // Verify second caregiver response
         ProfileResponse secondResponse = responses.get(1);
         assertThat(secondResponse.getId()).isEqualTo(careGiver2.getId());
         assertThat(secondResponse.getName()).isEqualTo(careGiver2.getName());
         assertThat(secondResponse.getEmail()).isEqualTo(careGiver2.getEmail());
-        assertThat(secondResponse.getWorkingSchedules()).isNotNull();
-        assertThat(secondResponse.getWorkingSchedules()).isEmpty();
 
         verify(careGiverRepository).findAll();
     }
@@ -598,7 +655,6 @@ class ProfileServiceImplTest {
         careGiverWithNullSchedules.setId(5L);
         careGiverWithNullSchedules.setEmail("nullschedules@example.com");
         careGiverWithNullSchedules.setName("Dr. Null");
-        careGiverWithNullSchedules.setWorkingSchedules(null); // Explicitly set to null
 
         List<CareGiver> careGiversWithNull = Arrays.asList(careGiverWithNullSchedules);
         when(careGiverRepository.findAll()).thenReturn(careGiversWithNull);
@@ -608,8 +664,6 @@ class ProfileServiceImplTest {
 
         // then
         assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getWorkingSchedules()).isNotNull();
-        assertThat(responses.get(0).getWorkingSchedules()).isEmpty();
 
         verify(careGiverRepository).findAll();
     }
@@ -635,9 +689,6 @@ class ProfileServiceImplTest {
         // Verify sensitive info is null
         assertThat(response.getNik()).isNull();
         assertThat(response.getAddress()).isNull();
-
-        // Verify working schedules
-        assertThat(response.getWorkingSchedules()).hasSize(1);
 
         verify(careGiverRepository).findById(caregiverId);
     }
@@ -673,133 +724,6 @@ class ProfileServiceImplTest {
     }
 
     @Test
-    void searchCareGiversLite_BySchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findByAvailableDayAndTime(dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-        assertThat(responses.get(0).getName()).isEqualTo(careGiver.getName());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByAvailableDayAndTime(dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_ByNameAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String name = "test";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findByNameAndAvailableDayAndTime(name, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, null, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByNameAndAvailableDayAndTime(name, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_BySpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String speciality = "general";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, speciality, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findBySpecialityAndAvailableDayAndTime(speciality, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_ByNameSpecialityAndSchedule_ShouldReturnMatchingCareGivers() {
-        // given
-        String name = "test";
-        String speciality = "general";
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        when(careGiverRepository.findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(name, speciality, dayOfWeek, time);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByNameAndSpecialityAndAvailableDayAndTime(name, speciality, dayOfWeek, time);
-    }
-
-    @Test
-    void searchCareGiversLite_ByDayOnly_ShouldReturnMatchingCareGivers() {
-        // given
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-
-        when(careGiverRepository.findByAvailableDayOfWeek(dayOfWeek))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when
-        List<ProfileResponse> responses = profileServiceImpl.searchCareGiversLite(null, null, dayOfWeek, null);
-
-        // then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getId()).isEqualTo(careGiver.getId());
-
-        // Verify repository was called with correct parameters
-        verify(careGiverRepository).findByAvailableDayOfWeek(dayOfWeek);
-    }
-
-    @Test
-    void searchCareGiversLite_WithoutScheduleParams_ShouldDelegateToOriginalMethod() {
-        // given
-        String name = "test";
-        String speciality = "general";
-
-        // Create a spy of the service implementation
-        ProfileServiceImpl spyService = spy(profileServiceImpl);
-
-        // Mock the repository since we're using a spy
-        when(careGiverRepository.findByNameAndSpeciality(name, speciality))
-                .thenReturn(Arrays.asList(careGiver));
-
-        // when - call the 4-param version with null schedule params
-        List<ProfileResponse> responses = spyService.searchCareGiversLite(name, speciality, null, null);
-
-        // then
-        assertThat(responses).hasSize(1);
-
-        // Verify the delegation happened
-        verify(spyService).searchCareGiversLite(name, speciality);
-    }
-
-    @Test
     void updateCurrentUserProfile_NoEmailChange_ForPacillian() {
         // Set up security context
         mockSecurityContext();
@@ -819,18 +743,23 @@ class ProfileServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(pacillian));
         when(pacillianRepository.save(any(Pacillian.class))).thenReturn(pacillian);
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        verify(userRepository).findById(1L);
-        verify(pacillianRepository).save(any(Pacillian.class));
-        verify(pacillianRepository).flush();
-        verify(userRepository, never()).existsByEmail(any());
+            // Verify
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
+            assertThat(response.getMedicalHistory()).isEqualTo("Updated Medical History");
+
+            verify(userRepository).findById(1L);
+            verify(pacillianRepository).save(any(Pacillian.class));
+            verify(pacillianRepository).flush();
+            verify(userRepository, never()).existsByEmail(any());
+        }
     }
 
     @Test
@@ -854,19 +783,24 @@ class ProfileServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(careGiver));
         when(careGiverRepository.save(any(CareGiver.class))).thenReturn(careGiver);
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
-        assertThat(response.getSpeciality()).isEqualTo("Updated Speciality");
-        assertThat(response.getWorkAddress()).isEqualTo("Updated Work Address");
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        verify(userRepository).findById(1L);
-        verify(careGiverRepository).save(any(CareGiver.class));
-        verify(careGiverRepository).flush();
-        verify(userRepository, never()).existsByEmail(any());
+            // Verify
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
+            assertThat(response.getSpeciality()).isEqualTo("Updated Speciality");
+            assertThat(response.getWorkAddress()).isEqualTo("Updated Work Address");
+
+            verify(userRepository).findById(1L);
+            verify(careGiverRepository).save(any(CareGiver.class));
+            verify(careGiverRepository).flush();
+            verify(userRepository, never()).existsByEmail(any());
+        }
     }
 
     @Test
@@ -884,19 +818,24 @@ class ProfileServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        verify(userRepository).findById(1L);
-        verify(userRepository).save(any(User.class));
-        verify(userRepository).flush();
-        verify(pacillianRepository, never()).save(any());
-        verify(careGiverRepository, never()).save(any());
-        verify(userRepository, never()).existsByEmail(any());
+            // Verify
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
+
+            verify(userRepository).findById(1L);
+            verify(userRepository).save(any(User.class));
+            verify(userRepository).flush();
+            verify(pacillianRepository, never()).save(any());
+            verify(careGiverRepository, never()).save(any());
+            verify(userRepository, never()).existsByEmail(any());
+        }
     }
 
     @Test
@@ -927,28 +866,33 @@ class ProfileServiceImplTest {
         when(requestAttributes.getResponse()).thenReturn(httpResponse);
         RequestContextHolder.setRequestAttributes(requestAttributes);
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
-        assertThat(response.getName()).isEqualTo("Updated Name");
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // Verify the repository calls with user ID - now expecting 2 calls to findById
-        verify(userRepository, times(2)).findById(1L);
-        verify(userRepository).existsByEmail(newEmail);
-        verify(userRepository).save(any(User.class));
-        verify(userRepository).flush();
+            // Verify
+            assertThat(response).isNotNull();
+            assertThat(response.getName()).isEqualTo("Updated Name");
 
-        // Verify token generation using user ID
-        verify(jwtUtils).generateJwtTokenFromUserId(user.getId().toString());
+            // Verify the repository calls with user ID - now expecting 2 calls to findById
+            verify(userRepository, times(2)).findById(1L);
+            verify(userRepository).existsByEmail(newEmail);
+            verify(userRepository).save(any(User.class));
+            verify(userRepository).flush();
 
-        // Instead of verifying the exact value, just verify that the headers are set
-        verify(httpResponse).setHeader(eq("Authorization"), anyString());
-        verify(httpResponse).setHeader("X-Email-Changed", "true");
+            // Verify token generation using user ID
+            verify(jwtUtils).generateJwtTokenFromUserId(user.getId().toString());
 
-        // Reset RequestContextHolder
-        RequestContextHolder.resetRequestAttributes();
+            // Instead of verifying the exact value, just verify that the headers are set
+            verify(httpResponse).setHeader(eq("Authorization"), anyString());
+            verify(httpResponse).setHeader("X-Email-Changed", "true");
+
+            // Reset RequestContextHolder
+            RequestContextHolder.resetRequestAttributes();
+        }
     }
 
     @Test
@@ -964,14 +908,19 @@ class ProfileServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.existsByEmail(newEmail)).thenReturn(true);
 
-        // Execute and verify exception
-        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
-                .isInstanceOf(EmailAlreadyExistsException.class)
-                .hasMessageContaining("Email is already in use");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).findById(1L);
-        verify(userRepository).existsByEmail(newEmail);
-        verify(userRepository, never()).save(any());
+            // Execute and verify exception
+            assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
+                    .isInstanceOf(EmailAlreadyExistsException.class)
+                    .hasMessageContaining("Email is already in use");
+
+            verify(userRepository).findById(1L);
+            verify(userRepository).existsByEmail(newEmail);
+            verify(userRepository, never()).save(any());
+        }
     }
 
     @Test
@@ -992,14 +941,19 @@ class ProfileServiceImplTest {
         // Set null request attributes
         RequestContextHolder.resetRequestAttributes();
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // Verify findById was called twice (once for initial lookup, once after email change)
-        verify(userRepository, times(2)).findById(user.getId());
+            // Verify
+            assertThat(response).isNotNull();
+
+            // Verify findById was called twice (once for initial lookup, once after email change)
+            verify(userRepository, times(2)).findById(user.getId());
+        }
     }
 
     @Test
@@ -1025,22 +979,26 @@ class ProfileServiceImplTest {
         when(requestAttributes.getResponse()).thenReturn(null);
         RequestContextHolder.setRequestAttributes(requestAttributes);
 
-        // Execute
-        ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify
-        assertThat(response).isNotNull();
-        verify(requestAttributes).getResponse();
+            // Execute
+            ProfileResponse response = profileServiceImpl.updateCurrentUserProfile(updateRequest);
 
-        // Verify repository calls
-        verify(userRepository, times(2)).findById(1L); // Changed from times(1) to times(2)
-        verify(userRepository).existsByEmail(newEmail);
-        verify(userRepository).save(any(User.class));
+            // Verify
+            assertThat(response).isNotNull();
+            verify(requestAttributes).getResponse();
 
-        // Reset RequestContextHolder
-        RequestContextHolder.resetRequestAttributes();
+            // Verify repository calls
+            verify(userRepository, times(2)).findById(1L); // Changed from times(1) to times(2)
+            verify(userRepository).existsByEmail(newEmail);
+            verify(userRepository).save(any(User.class));
+
+            // Reset RequestContextHolder
+            RequestContextHolder.resetRequestAttributes();
+        }
     }
-
 
     @Test
     void updateCurrentUserProfile_UserNotFoundAfterUpdate() {
@@ -1059,14 +1017,81 @@ class ProfileServiceImplTest {
         when(userRepository.existsByEmail(newEmail)).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(user);
 
-        // Execute and verify exception
-        assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
-                .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("User not found after update");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify findById was called twice
-        verify(userRepository, times(2)).findById(user.getId());
+            // Execute and verify exception
+            assertThatThrownBy(() -> profileServiceImpl.updateCurrentUserProfile(updateRequest))
+                    .isInstanceOf(EntityNotFoundException.class)
+                    .hasMessageContaining("User not found after update");
+
+            // Verify findById was called twice
+            verify(userRepository, times(2)).findById(user.getId());
+        }
     }
+
+    @Test
+    void getUserName_ShouldReturnUserName() {
+        // given
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        // when
+        String userName = profileServiceImpl.getUserName(1L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Test User");
+
+        verify(userRepository).findById(1L);
+    }
+
+    @Test
+    void getUserName_WithNonExistentUser_ShouldThrowException() {
+        // given
+        Long nonExistentUserId = 999L;
+        when(userRepository.findById(nonExistentUserId)).thenReturn(Optional.empty());
+
+        // when/then
+        assertThatThrownBy(() -> profileServiceImpl.getUserName(nonExistentUserId))
+                .isInstanceOf(EntityNotFoundException.class)
+                .hasMessageContaining("User not found with id: " + nonExistentUserId);
+
+        verify(userRepository).findById(nonExistentUserId);
+    }
+
+    @Test
+    void getUserName_WithPacillian_ShouldReturnPacillianName() {
+        // given
+        when(userRepository.findById(2L)).thenReturn(Optional.of(pacillian));
+
+        // when
+        String userName = profileServiceImpl.getUserName(2L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Test Pacillian");
+
+        verify(userRepository).findById(2L);
+    }
+
+    @Test
+    void getUserName_WithCareGiver_ShouldReturnCareGiverName() {
+        // given
+        when(userRepository.findById(3L)).thenReturn(Optional.of(careGiver));
+
+        // when
+        String userName = profileServiceImpl.getUserName(3L);
+
+        // then
+        assertThat(userName).isNotNull();
+        assertThat(userName).isEqualTo("Dr. Test");
+
+        verify(userRepository).findById(3L);
+    }
+
+
+
 
 
 }

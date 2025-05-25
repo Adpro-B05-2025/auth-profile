@@ -9,13 +9,9 @@ import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,11 +81,9 @@ public class ProfileController {
     @GetMapping("/caregiver/search")
     public ResponseEntity<List<ProfileResponse>> searchCareGivers(
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String speciality,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) DayOfWeek dayOfWeek,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime time) {
+            @RequestParam(required = false) String speciality) {
 
-        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality, dayOfWeek, time);
+        List<ProfileResponse> careGivers = profileService.searchCareGiversLite(name, speciality);
         return ResponseEntity.ok(careGivers);
     }
 
@@ -113,6 +107,7 @@ public class ProfileController {
         return ResponseEntity.ok(profile);
     }
 
+
     @GetMapping("/profile/ratings")
     public ResponseEntity<RatingSummaryResponse> getRatingsForCurrentUser() {
         RatingSummaryResponse ratingSummary = profileService.getRatingSummaryForCurrentUser();
@@ -124,5 +119,32 @@ public class ProfileController {
     public ResponseEntity<RatingSummaryResponse> getCaregiverRatingSummary(@PathVariable Long id) {
         RatingSummaryResponse ratingSummary = profileService.getRatingSummaryForCaregiver(id);
         return ResponseEntity.ok(ratingSummary);
+
+
+    @GetMapping("/user/{userId}/name")
+    @RequiresAuthorization(
+            action = "VIEW_USERNAME"
+    )
+    public ResponseEntity<Map<String, Object>> getUserName(@PathVariable Long userId) {
+
+        try {
+            String userName = profileService.getUserName(userId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", userId);
+            response.put("name", userName);
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "User not found");
+            error.put("id", userId);
+            error.put("name", "User " + userId); // Fallback name
+
+            return ResponseEntity.status(404).body(error);
+        }
+
     }
 }

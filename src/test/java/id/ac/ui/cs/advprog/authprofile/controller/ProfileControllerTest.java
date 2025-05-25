@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authprofile.controller;
 
 import java.util.Map;
 import id.ac.ui.cs.advprog.authprofile.config.AuthTestConfig;
+import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.config.ProfileServiceTestConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
@@ -10,6 +11,9 @@ import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,9 +30,6 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 
@@ -44,7 +45,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(controllers = ProfileController.class)
 @Import({AuthTestConfig.class, ProfileServiceTestConfig.class, ProfileControllerTest.TestConfig.class})
@@ -52,12 +52,33 @@ class ProfileControllerTest {
 
     @TestConfiguration
     static class TestConfig {
+
+        @Bean
+        @Primary
+        public MonitoringConfig monitoringConfig() {
+            MonitoringConfig mockConfig = mock(MonitoringConfig.class);
+            MeterRegistry mockRegistry = mock(MeterRegistry.class);
+            Counter mockCounter = mock(Counter.class);
+
+            // Set up the public field
+            mockConfig.meterRegistry = mockRegistry;
+
+            // Mock counter methods with specific signatures to avoid ambiguity
+            when(mockRegistry.counter(anyString(), any(Tags.class))).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(mockCounter);
+
+            return mockConfig;
+        }
+
         @Bean
         @Primary
         public AuthorizationAspect authorizationAspect(AuthorizationContext authorizationContext,
-                                                       UserRepository userRepository) {
+                                                       UserRepository userRepository,
+                                                       MonitoringConfig monitoringConfig) {
             // Create the real aspect but with your mocked dependencies
-            return new AuthorizationAspect(authorizationContext, userRepository);
+            return new AuthorizationAspect(authorizationContext, userRepository, monitoringConfig);
         }
 
         @Bean
@@ -239,7 +260,7 @@ class ProfileControllerTest {
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(null), eq(null)))
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology")))
                 .thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
@@ -272,59 +293,16 @@ class ProfileControllerTest {
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-        // Set up day and time for search
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-        LocalTime time = LocalTime.of(10, 0); // 10:00 AM
-
-        // Format the time for the HTTP request
-        String timeString = time.format(DateTimeFormatter.ISO_TIME); // Formats as 10:00:00
-
-        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology"), eq(dayOfWeek), eq(time)))
+        when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology")))
                 .thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
-                        .param("speciality", "Cardiology")
-                        .param("dayOfWeek", dayOfWeek.toString())
-                        .param("time", timeString))
+                        .param("speciality", "Cardiology"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
                 .andExpect(jsonPath("$[0].phoneNumber").value(caregiver.getPhoneNumber()))
-                .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
-                .andExpect(jsonPath("$[0].nik").doesNotExist());
-    }
-
-    @Test
-    @WithMockUser(roles = "PACILLIAN")
-    void searchCareGiversByDayOnly() throws Exception {
-        // Create lite profile response for search result
-        ProfileResponse caregiver = new ProfileResponse();
-        caregiver.setId(2L);
-        caregiver.setEmail("doctor1@example.com");
-        caregiver.setName("Doctor One");
-        caregiver.setPhoneNumber("081234567890");
-        caregiver.setUserType("CAREGIVER");
-        caregiver.setSpeciality("Cardiology");
-        caregiver.setWorkAddress("Hospital A");
-        caregiver.setAverageRating(4.5);
-        // Leave sensitive fields null
-        caregiver.setNik(null);
-        caregiver.setAddress(null);
-
-        List<ProfileResponse> caregivers = Arrays.asList(caregiver);
-
-        // Set up day for search
-        DayOfWeek dayOfWeek = DayOfWeek.MONDAY;
-
-        when(profileService.searchCareGiversLite(eq(null), eq(null), eq(dayOfWeek), eq(null)))
-                .thenReturn(caregivers);
-
-        mockMvc.perform(get("/api/caregiver/search")
-                        .param("dayOfWeek", dayOfWeek.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
-                .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
                 .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
                 .andExpect(jsonPath("$[0].nik").doesNotExist());
     }
@@ -510,5 +488,112 @@ class ProfileControllerTest {
         assertEquals(updatedProfile, responseEntity5.getBody());
     }
 
+    @Test
+    @WithMockUser(roles = "CAREGIVER")
+    void getUserName_AsCareGiver_ShouldReturnUserNameAndId() throws Exception {
+        // given
+        Long userId = 2L;
+        String userName = "Dr. Smith";
+        when(profileService.getUserName(userId)).thenReturn(userName);
 
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value(userName));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithNonExistentUser_ShouldReturnNotFoundWithFallback() throws Exception {
+        // given
+        Long nonExistentUserId = 999L;
+        when(profileService.getUserName(nonExistentUserId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + nonExistentUserId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", nonExistentUserId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(nonExistentUserId))
+                .andExpect(jsonPath("$.name").value("User " + nonExistentUserId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithServiceException_ShouldReturnNotFoundWithFallback() throws Exception {
+        // given
+        Long userId = 1L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new RuntimeException("Database connection error"));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithPacillianUser_ShouldReturnCorrectName() throws Exception {
+        // given
+        Long pacillianId = 3L;
+        String pacillianName = "John Patient";
+        when(profileService.getUserName(pacillianId)).thenReturn(pacillianName);
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", pacillianId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(pacillianId))
+                .andExpect(jsonPath("$.name").value(pacillianName));
+    }
+
+    @Test
+    @WithMockUser(roles = "CAREGIVER")
+    void getUserName_WithCareGiverUser_ShouldReturnCorrectName() throws Exception {
+        // given
+        Long caregiverId = 4L;
+        String caregiverName = "Dr. Johnson";
+        when(profileService.getUserName(caregiverId)).thenReturn(caregiverName);
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", caregiverId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(caregiverId))
+                .andExpect(jsonPath("$.name").value(caregiverName));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithZeroUserId_ShouldHandleGracefully() throws Exception {
+        // given
+        Long userId = 0L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + userId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
+
+    @Test
+    @WithMockUser(roles = "PACILLIAN")
+    void getUserName_WithNegativeUserId_ShouldHandleGracefully() throws Exception {
+        // given
+        Long userId = -1L;
+        when(profileService.getUserName(userId))
+                .thenThrow(new EntityNotFoundException("User not found with id: " + userId));
+
+        // when/then
+        mockMvc.perform(get("/api/user/{userId}/name", userId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("User not found"))
+                .andExpect(jsonPath("$.id").value(userId))
+                .andExpect(jsonPath("$.name").value("User " + userId));
+    }
 }

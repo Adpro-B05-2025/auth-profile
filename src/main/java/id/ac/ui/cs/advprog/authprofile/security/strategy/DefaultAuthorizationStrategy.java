@@ -10,27 +10,25 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(Integer.MAX_VALUE) // Lowest possible precedence
-public class DefaultAuthorizationStrategy implements AuthorizationStrategy {
+public class DefaultAuthorizationStrategy extends BaseAuthorizationStrategy {
 
     @Override
     public boolean isAuthorized(User user, Long resourceId, String action) {
-        // Basic permissions any user should have
-        switch (action) {
-            case "VIEW_OWN_PROFILE":
-                return true;
-            case "UPDATE_PROFILE":
-            case "DELETE_PROFILE":
-                return resourceId == null || user.getId().equals(resourceId);
-            default:
-                return false;
-        }
+        return switch (action) {
+            // Basic permissions any user should have
+            case VIEW_OWN_PROFILE, VIEW_USERNAME -> true;
+
+            // Handle modification actions using base class logic
+            case UPDATE_PROFILE, DELETE_PROFILE -> handleModificationActions(user, resourceId, action);
+
+            // Deny all other actions by default
+            default -> false;
+        };
     }
 
     @Override
     public boolean supportsUserType(User user) {
-        // This is a fallback strategy that will handle any user type
+        // This is a fallback strategy that handles any user type
         return true;
     }
-
-
 }

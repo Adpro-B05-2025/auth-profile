@@ -1,19 +1,22 @@
+// Add these methods to your existing CareGiverRepository interface
+
 package id.ac.ui.cs.advprog.authprofile.repository;
 
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface CareGiverRepository extends JpaRepository<CareGiver, Long> {
-    // Existing methods
+
+    // Existing methods...
     Optional<CareGiver> findByEmail(String email);
 
     @Query("SELECT c FROM CareGiver c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))")
@@ -27,50 +30,46 @@ public interface CareGiverRepository extends JpaRepository<CareGiver, Long> {
             "LOWER(c.speciality) LIKE LOWER(CONCAT('%', :speciality, '%'))")
     List<CareGiver> findByNameAndSpeciality(@Param("name") String name, @Param("speciality") String speciality);
 
-    // New methods for searching by schedule
-    @Query("SELECT DISTINCT c FROM CareGiver c JOIN c.workingSchedules ws WHERE " +
-            "ws.dayOfWeek = :dayOfWeek AND ws.isAvailable = true")
-    List<CareGiver> findByAvailableDayOfWeek(@Param("dayOfWeek") DayOfWeek dayOfWeek);
-
-    @Query("SELECT DISTINCT c FROM CareGiver c JOIN c.workingSchedules ws WHERE " +
-            "ws.dayOfWeek = :dayOfWeek AND " +
-            "ws.startTime <= :time AND " +
-            "ws.endTime > :time AND " +
-            "ws.isAvailable = true")
-    List<CareGiver> findByAvailableDayAndTime(@Param("dayOfWeek") DayOfWeek dayOfWeek, @Param("time") LocalTime time);
-
-    @Query("SELECT DISTINCT c FROM CareGiver c JOIN c.workingSchedules ws WHERE " +
-            "ws.dayOfWeek = :dayOfWeek AND " +
-            "ws.startTime <= :time AND " +
-            "ws.endTime > :time AND " +
-            "ws.isAvailable = true AND " +
-            "LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))")
-    List<CareGiver> findByNameAndAvailableDayAndTime(
-            @Param("name") String name,
-            @Param("dayOfWeek") DayOfWeek dayOfWeek,
-            @Param("time") LocalTime time);
-
-    @Query("SELECT DISTINCT c FROM CareGiver c JOIN c.workingSchedules ws WHERE " +
-            "ws.dayOfWeek = :dayOfWeek AND " +
-            "ws.startTime <= :time AND " +
-            "ws.endTime > :time AND " +
-            "ws.isAvailable = true AND " +
-            "LOWER(c.speciality) LIKE LOWER(CONCAT('%', :speciality, '%'))")
-    List<CareGiver> findBySpecialityAndAvailableDayAndTime(
-            @Param("speciality") String speciality,
-            @Param("dayOfWeek") DayOfWeek dayOfWeek,
-            @Param("time") LocalTime time);
-
-    @Query("SELECT DISTINCT c FROM CareGiver c JOIN c.workingSchedules ws WHERE " +
-            "ws.dayOfWeek = :dayOfWeek AND " +
-            "ws.startTime <= :time AND " +
-            "ws.endTime > :time AND " +
-            "ws.isAvailable = true AND " +
+    @Query("SELECT c FROM CareGiver c WHERE " +
             "LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%')) AND " +
             "LOWER(c.speciality) LIKE LOWER(CONCAT('%', :speciality, '%'))")
-    List<CareGiver> findByNameAndSpecialityAndAvailableDayAndTime(
+    Page<CareGiver> findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
             @Param("name") String name,
             @Param("speciality") String speciality,
-            @Param("dayOfWeek") DayOfWeek dayOfWeek,
-            @Param("time") LocalTime time);
+            Pageable pageable);
+
+    @Query("SELECT c FROM CareGiver c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    Page<CareGiver> findByNameContainingIgnoreCase(@Param("name") String name, Pageable pageable);
+
+    @Query("SELECT c FROM CareGiver c WHERE LOWER(c.speciality) LIKE LOWER(CONCAT('%', :speciality, '%'))")
+    Page<CareGiver> findBySpecialityContainingIgnoreCase(@Param("speciality") String speciality, Pageable pageable);
+
+    /**
+     * Find caregivers with filters (non-paginated version)
+     * This method handles all combinations of name and speciality filters
+     */
+    @Query("SELECT c FROM CareGiver c WHERE " +
+            "(:name IS NULL OR LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
+            "(:speciality IS NULL OR LOWER(c.speciality) LIKE LOWER(CONCAT('%', :speciality, '%')))")
+    List<CareGiver> findCareGiversWithFilters(
+            @Param("name") String name,
+            @Param("speciality") String speciality);
+
+    /**
+     * Get name suggestions for autocomplete (limit results for performance)
+     */
+    @Query("SELECT DISTINCT c.name FROM CareGiver c WHERE " +
+            "LOWER(c.name) LIKE LOWER(CONCAT('%', :prefix, '%')) " +
+            "ORDER BY c.name")
+    List<String> findNameSuggestions(@Param("prefix") String prefix);
+
+    /**
+     * Get speciality suggestions for autocomplete (limit results for performance)
+     */
+    @Query("SELECT DISTINCT c.speciality FROM CareGiver c WHERE " +
+            "LOWER(c.speciality) LIKE LOWER(CONCAT('%', :query, '%')) " +
+            "ORDER BY c.speciality")
+    List<String> findSpecialitySuggestions(@Param("query") String query);
+
+
 }

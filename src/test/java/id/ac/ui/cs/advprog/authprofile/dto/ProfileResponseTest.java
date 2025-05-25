@@ -4,7 +4,6 @@ import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
 import id.ac.ui.cs.advprog.authprofile.model.Role;
-import id.ac.ui.cs.advprog.authprofile.model.WorkingSchedule;
 import org.junit.jupiter.api.Test;
 
 import java.time.DayOfWeek;
@@ -55,7 +54,6 @@ class ProfileResponseTest {
         assertThat(response.getSpeciality()).isNull();
         assertThat(response.getWorkAddress()).isNull();
         assertThat(response.getAverageRating()).isNull();
-        assertThat(response.getWorkingSchedules()).isNull();
     }
 
     @Test
@@ -80,13 +78,6 @@ class ProfileResponseTest {
         careGiver.setAverageRating(4.5);
         careGiver.setRoles(roles);
 
-        // Add working schedule
-        WorkingSchedule schedule = new WorkingSchedule();
-        schedule.setDayOfWeek(DayOfWeek.MONDAY);
-        schedule.setStartTime(LocalTime.of(8, 0));
-        schedule.setEndTime(LocalTime.of(16, 0));
-        schedule.setAvailable(true);
-        careGiver.addWorkingSchedule(schedule);
 
         // when
         ProfileResponse response = ProfileResponse.fromUser(careGiver);
@@ -106,11 +97,6 @@ class ProfileResponseTest {
         assertThat(response.getSpeciality()).isEqualTo("Cardiology");
         assertThat(response.getWorkAddress()).isEqualTo("Heart Hospital");
         assertThat(response.getAverageRating()).isEqualTo(4.5);
-        assertThat(response.getWorkingSchedules()).hasSize(1);
-        assertThat(response.getWorkingSchedules().get(0).getDayOfWeek()).isEqualTo(DayOfWeek.MONDAY);
-        assertThat(response.getWorkingSchedules().get(0).getStartTime()).isEqualTo(LocalTime.of(8, 0));
-        assertThat(response.getWorkingSchedules().get(0).getEndTime()).isEqualTo(LocalTime.of(16, 0));
-        assertThat(response.getWorkingSchedules().get(0).isAvailable()).isTrue();
 
         // This should be null for a CareGiver
         assertThat(response.getMedicalHistory()).isNull();
