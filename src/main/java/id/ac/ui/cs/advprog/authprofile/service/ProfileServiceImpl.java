@@ -1,8 +1,11 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.client.RatingClientService;
+import id.ac.ui.cs.advprog.authprofile.dto.rating.RatingResponseDto;
 import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.RatingSummaryResponse;
 import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.model.Pacillian;
@@ -37,7 +40,9 @@ public class ProfileServiceImpl implements IProfileService {
     private final PacillianRepository pacillianRepository;
     private final CareGiverRepository careGiverRepository;
     private final JwtUtils jwtUtils;
+    private final RatingClientService ratingClientService;
     private final MonitoringConfig monitoringConfig;
+
 
     @Autowired
     public ProfileServiceImpl(
@@ -45,11 +50,14 @@ public class ProfileServiceImpl implements IProfileService {
             PacillianRepository pacillianRepository,
             CareGiverRepository careGiverRepository,
             JwtUtils jwtUtils,
+            RatingClientService ratingClientService,
             MonitoringConfig monitoringConfig) {
+
         this.userRepository = userRepository;
         this.pacillianRepository = pacillianRepository;
         this.careGiverRepository = careGiverRepository;
         this.jwtUtils = jwtUtils;
+        this.ratingClientService = ratingClientService;
         this.monitoringConfig = monitoringConfig;
     }
 
@@ -77,7 +85,14 @@ public class ProfileServiceImpl implements IProfileService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
 
-        return ProfileResponse.fromUser(user);
+        ProfileResponse profile = ProfileResponse.fromUser(user);
+
+        if (user instanceof CareGiver) {
+            double avgRating = calculateAverageRating(user.getId());
+            profile.setAverageRating(avgRating);
+        }
+
+        return profile;
     }
 
     @Override
@@ -357,4 +372,49 @@ public class ProfileServiceImpl implements IProfileService {
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
         return user.getName();
     }
+
+    private double calculateAverageRating(Long doctorId) {
+        List<RatingResponseDto> ratings = ratingClientService.getRatingsByDoctorId(doctorId);
+        if (ratings.isEmpty()) {
+            return 0.0;
+        }
+        double sum = ratings.stream().mapToInt(RatingResponseDto::getScore).sum();
+        return sum / ratings.size();
+    }
+
+    @Override
+    public RatingSummaryResponse getRatingSummaryForCurrentUser() {
+        // Ambil ID user saat ini dari security context
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long currentUserId = Long.parseLong(userDetails.getUsername());
+
+        // Panggil ratingClientService yang sudah kamu buat
+        List<RatingResponseDto> ratings = ratingClientService.getRatingsByDoctorId(currentUserId);
+
+        if (ratings == null || ratings.isEmpty()) {
+            return new RatingSummaryResponse(0, 0);
+        }
+
+        int total = ratings.size();
+        double sum = ratings.stream().mapToInt(RatingResponseDto::getScore).sum();
+        double avg = sum / total;
+
+        return new RatingSummaryResponse(avg, total);
+    }
+
+    @Override
+    public RatingSummaryResponse getRatingSummaryForCaregiver(Long caregiverId) {
+        List<RatingResponseDto> ratings = ratingClientService.getRatingsByDoctorId(caregiverId);
+
+        if (ratings == null || ratings.isEmpty()) {
+            return new RatingSummaryResponse(0, 0);
+        }
+
+        int total = ratings.size();
+        double sum = ratings.stream().mapToInt(RatingResponseDto::getScore).sum();
+        double avg = sum / total;
+
+        return new RatingSummaryResponse(avg, total);
+    }
+
 }

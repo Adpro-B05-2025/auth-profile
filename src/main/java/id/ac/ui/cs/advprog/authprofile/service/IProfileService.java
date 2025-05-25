@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.RatingSummaryResponse;
 
 import java.util.List;
 
@@ -72,5 +73,13 @@ public interface IProfileService {
      * @param userId the user ID
      * @return the user's name
      */
+
+    List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time);
+
+    RatingSummaryResponse getRatingSummaryForCurrentUser();
+
+    RatingSummaryResponse getRatingSummaryForCaregiver(Long id);
+
     String getUserName(Long userId);
+
 }
