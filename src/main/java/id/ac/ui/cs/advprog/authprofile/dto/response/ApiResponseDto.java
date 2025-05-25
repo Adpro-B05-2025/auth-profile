@@ -1,4 +1,4 @@
-package id.ac.ui.cs.advprog.authprofile.dto.rating;
+package id.ac.ui.cs.advprog.authprofile.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

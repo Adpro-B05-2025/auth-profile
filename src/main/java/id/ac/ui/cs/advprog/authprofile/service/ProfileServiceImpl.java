@@ -1,7 +1,7 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.client.RatingClientService;
-import id.ac.ui.cs.advprog.authprofile.dto.rating.RatingResponseDto;
+import id.ac.ui.cs.advprog.authprofile.dto.response.RatingResponseDto;
 import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
@@ -42,7 +42,7 @@ public class ProfileServiceImpl implements IProfileService {
     private final JwtUtils jwtUtils;
     private final RatingClientService ratingClientService;
     private final MonitoringConfig monitoringConfig;
-
+    private final IRatingService ratingService;
 
     @Autowired
     public ProfileServiceImpl(
@@ -51,7 +51,7 @@ public class ProfileServiceImpl implements IProfileService {
             CareGiverRepository careGiverRepository,
             JwtUtils jwtUtils,
             RatingClientService ratingClientService,
-            MonitoringConfig monitoringConfig) {
+            MonitoringConfig monitoringConfig, IRatingService ratingService) {
 
         this.userRepository = userRepository;
         this.pacillianRepository = pacillianRepository;
@@ -59,6 +59,7 @@ public class ProfileServiceImpl implements IProfileService {
         this.jwtUtils = jwtUtils;
         this.ratingClientService = ratingClientService;
         this.monitoringConfig = monitoringConfig;
+        this.ratingService = ratingService;
     }
 
     @Override
@@ -87,9 +88,23 @@ public class ProfileServiceImpl implements IProfileService {
 
         ProfileResponse profile = ProfileResponse.fromUser(user);
 
+        // Enhanced rating integration for caregivers
         if (user instanceof CareGiver) {
-            double avgRating = calculateAverageRating(user.getId());
-            profile.setAverageRating(avgRating);
+            try {
+                RatingSummaryResponse ratingSummary = ratingService.getRatingSummary(userId);
+                profile.setAverageRating(ratingSummary.getAverageRating());
+
+                // Also update the caregiver entity if ratings have changed significantly
+                CareGiver caregiver = (CareGiver) user;
+                if (Math.abs(caregiver.getAverageRating() - ratingSummary.getAverageRating()) > 0.1) {
+                    // Async update to avoid blocking the request
+                    ratingService.updateCaregiverRatingCache(userId);
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to get rating summary for caregiver {}: {}", userId, e.getMessage());
+                // Fall back to cached rating from database
+                profile.setAverageRating(((CareGiver) user).getAverageRating());
+            }
         }
 
         return profile;
@@ -102,7 +117,7 @@ public class ProfileServiceImpl implements IProfileService {
 
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
-                .map(ProfileResponse::fromUser)
+                .map(this::enhanceProfileWithRating)
                 .collect(Collectors.toList());
     }
 
@@ -304,7 +319,7 @@ public class ProfileServiceImpl implements IProfileService {
 
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
-                .map(this::createLiteProfileResponse)
+                .map(this::createLiteProfileResponseWithRating)
                 .collect(Collectors.toList());
     }
 
@@ -329,7 +344,7 @@ public class ProfileServiceImpl implements IProfileService {
         }
 
         return careGivers.stream()
-                .map(this::createLiteProfileResponse)
+                .map(this::createLiteProfileResponseWithRating)
                 .collect(Collectors.toList());
     }
 
@@ -361,7 +376,7 @@ public class ProfileServiceImpl implements IProfileService {
         CareGiver careGiver = careGiverRepository.findById(caregiverId)
                 .orElseThrow(() -> new EntityNotFoundException("Caregiver not found with id: " + caregiverId));
 
-        return createLiteProfileResponse(careGiver);
+        return createLiteProfileResponseWithRating(careGiver);
     }
 
     @Timed(value = "profile_get_username_duration", description = "Time taken to get username by ID")
@@ -416,5 +431,51 @@ public class ProfileServiceImpl implements IProfileService {
 
         return new RatingSummaryResponse(avg, total);
     }
+
+    /**
+     * Enhanced profile creation with real-time rating data
+     */
+    private ProfileResponse enhanceProfileWithRating(CareGiver careGiver) {
+        ProfileResponse response = ProfileResponse.fromUser(careGiver);
+
+        try {
+            RatingSummaryResponse ratingSummary = ratingService.getRatingSummary(careGiver.getId());
+            response.setAverageRating(ratingSummary.getAverageRating());
+        } catch (Exception e) {
+            logger.debug("Failed to get real-time rating for caregiver {}, using cached value", careGiver.getId());
+            response.setAverageRating(careGiver.getAverageRating());
+        }
+
+        return response;
+    }
+
+    /**
+     * Creates a lite version of ProfileResponse with essential information and rating
+     */
+    private ProfileResponse createLiteProfileResponseWithRating(CareGiver careGiver) {
+        ProfileResponse response = new ProfileResponse();
+        response.setId(careGiver.getId());
+        response.setEmail(careGiver.getEmail());
+        response.setName(careGiver.getName());
+        // Set NIK and address to null for security
+        response.setNik(null);
+        response.setAddress(null);
+        response.setPhoneNumber(careGiver.getPhoneNumber());
+        response.setUserType("CAREGIVER");
+        response.setSpeciality(careGiver.getSpeciality());
+        response.setWorkAddress(careGiver.getWorkAddress());
+
+        // Try to get real-time rating, fall back to cached if service is unavailable
+        try {
+            RatingSummaryResponse ratingSummary = ratingService.getRatingSummary(careGiver.getId());
+            response.setAverageRating(ratingSummary.getAverageRating());
+        } catch (Exception e) {
+            logger.debug("Using cached rating for caregiver {} due to service unavailability", careGiver.getId());
+            response.setAverageRating(careGiver.getAverageRating());
+        }
+
+        return response;
+    }
+
 
 }

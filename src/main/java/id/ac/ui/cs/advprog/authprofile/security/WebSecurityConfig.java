@@ -64,6 +64,10 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/caregiver/all").permitAll()
                         .requestMatchers("/api/caregiver/search**").permitAll()
+
+                        // Rating endpoints - public access for basic health check
+                        .requestMatchers("/api/ratings/health").permitAll()
+
                         // MONITORING ENDPOINTS - Allow public access
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
