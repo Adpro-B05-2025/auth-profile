@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authprofile.controller;
 
 import java.util.Map;
 import id.ac.ui.cs.advprog.authprofile.config.AuthTestConfig;
+import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.config.ProfileServiceTestConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
@@ -10,6 +11,9 @@ import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.aspect.AuthorizationAspect;
 import id.ac.ui.cs.advprog.authprofile.security.strategy.AuthorizationContext;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,9 +30,6 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 
@@ -44,7 +45,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(controllers = ProfileController.class)
 @Import({AuthTestConfig.class, ProfileServiceTestConfig.class, ProfileControllerTest.TestConfig.class})
@@ -52,12 +52,33 @@ class ProfileControllerTest {
 
     @TestConfiguration
     static class TestConfig {
+
+        @Bean
+        @Primary
+        public MonitoringConfig monitoringConfig() {
+            MonitoringConfig mockConfig = mock(MonitoringConfig.class);
+            MeterRegistry mockRegistry = mock(MeterRegistry.class);
+            Counter mockCounter = mock(Counter.class);
+
+            // Set up the public field
+            mockConfig.meterRegistry = mockRegistry;
+
+            // Mock counter methods with specific signatures to avoid ambiguity
+            when(mockRegistry.counter(anyString(), any(Tags.class))).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString())).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(mockCounter);
+            when(mockRegistry.counter(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(mockCounter);
+
+            return mockConfig;
+        }
+
         @Bean
         @Primary
         public AuthorizationAspect authorizationAspect(AuthorizationContext authorizationContext,
-                                                       UserRepository userRepository) {
+                                                       UserRepository userRepository,
+                                                       MonitoringConfig monitoringConfig) {
             // Create the real aspect but with your mocked dependencies
-            return new AuthorizationAspect(authorizationContext, userRepository);
+            return new AuthorizationAspect(authorizationContext, userRepository, monitoringConfig);
         }
 
         @Bean
@@ -272,16 +293,12 @@ class ProfileControllerTest {
 
         List<ProfileResponse> caregivers = Arrays.asList(caregiver);
 
-
-
         when(profileService.searchCareGiversLite(eq("Doctor"), eq("Cardiology")))
                 .thenReturn(caregivers);
 
         mockMvc.perform(get("/api/caregiver/search")
                         .param("name", "Doctor")
-                        .param("speciality", "Cardiology")
-
-                        )
+                        .param("speciality", "Cardiology"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(caregiver.getId()))
                 .andExpect(jsonPath("$[0].email").value(caregiver.getEmail()))
@@ -289,8 +306,6 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$[0].speciality").value(caregiver.getSpeciality()))
                 .andExpect(jsonPath("$[0].nik").doesNotExist());
     }
-
-
 
     @Test
     @WithMockUser(roles = "PACILLIAN")
@@ -473,8 +488,6 @@ class ProfileControllerTest {
         assertEquals(updatedProfile, responseEntity5.getBody());
     }
 
-
-
     @Test
     @WithMockUser(roles = "CAREGIVER")
     void getUserName_AsCareGiver_ShouldReturnUserNameAndId() throws Exception {
@@ -552,7 +565,6 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.name").value(caregiverName));
     }
 
-
     @Test
     @WithMockUser(roles = "PACILLIAN")
     void getUserName_WithZeroUserId_ShouldHandleGracefully() throws Exception {
@@ -584,6 +596,4 @@ class ProfileControllerTest {
                 .andExpect(jsonPath("$.id").value(userId))
                 .andExpect(jsonPath("$.name").value("User " + userId));
     }
-
-
 }

@@ -1,8 +1,13 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
 import id.ac.ui.cs.advprog.authprofile.model.CareGiver;
 import id.ac.ui.cs.advprog.authprofile.repository.CareGiverRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,12 +26,25 @@ import java.util.concurrent.ExecutionException;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class SearchCareGiverServiceTest {
 
     @Mock
     private CareGiverRepository careGiverRepository;
+
+    @Mock
+    private MonitoringConfig monitoringConfig;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter mockCounter;
+
+    @Mock
+    private Gauge mockGauge;
 
     @InjectMocks
     private SearchCareGiverService searchCareGiverService;
@@ -56,6 +74,11 @@ class SearchCareGiverServiceTest {
         careGiver2.setAverageRating(4.8);
 
         careGivers = Arrays.asList(careGiver1, careGiver2);
+
+        // Setup monitoring config mocks with lenient stubbing
+        monitoringConfig.meterRegistry = meterRegistry;
+        lenient().when(meterRegistry.counter(anyString(), any(Tags.class))).thenReturn(mockCounter);
+        lenient().when(meterRegistry.gauge(anyString(), any(Tags.class), any(), any())).thenReturn(mockGauge);
     }
 
     // EXISTING TESTS (keeping all your current tests)
@@ -78,6 +101,7 @@ class SearchCareGiverServiceTest {
         assertNull(responses.get(0).getAddress()); // Should be hidden
 
         verify(careGiverRepository).findCareGiversWithFilters("John", "Cardiology");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -94,6 +118,7 @@ class SearchCareGiverServiceTest {
         List<ProfileResponse> responses = result.get();
         assertEquals(1, responses.size());
         verify(careGiverRepository).findCareGiversWithFilters("Smith", null);
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -111,6 +136,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, responses.size());
         assertEquals("Pediatrics", responses.get(0).getSpeciality());
         verify(careGiverRepository).findCareGiversWithFilters(null, "Pediatrics");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -127,6 +153,7 @@ class SearchCareGiverServiceTest {
         List<ProfileResponse> responses = result.get();
         assertEquals(2, responses.size());
         verify(careGiverRepository).findCareGiversWithFilters(null, null);
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -143,6 +170,7 @@ class SearchCareGiverServiceTest {
         List<ProfileResponse> responses = result.get();
         assertEquals(2, responses.size());
         verify(careGiverRepository).findCareGiversWithFilters(null, null);
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -165,6 +193,7 @@ class SearchCareGiverServiceTest {
         Page<ProfileResponse> responses = result.get();
         assertEquals(1, responses.getTotalElements());
         assertEquals("Dr. John Smith", responses.getContent().get(0).getName());
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -185,6 +214,7 @@ class SearchCareGiverServiceTest {
         // Then
         Page<ProfileResponse> responses = result.get();
         assertEquals(1, responses.getTotalElements());
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -205,6 +235,7 @@ class SearchCareGiverServiceTest {
         // Then
         Page<ProfileResponse> responses = result.get();
         assertEquals(1, responses.getTotalElements());
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -224,6 +255,7 @@ class SearchCareGiverServiceTest {
         // Then
         Page<ProfileResponse> responses = result.get();
         assertEquals(2, responses.getTotalElements());
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -246,6 +278,7 @@ class SearchCareGiverServiceTest {
         // Verify that invalid parameters were corrected (page=0, size=10)
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     // NEW TESTS FOR MISSING COVERAGE
@@ -270,6 +303,7 @@ class SearchCareGiverServiceTest {
         // Verify that size was corrected to 10
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -292,6 +326,7 @@ class SearchCareGiverServiceTest {
         // Verify that size 100 is allowed
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 100));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -308,6 +343,7 @@ class SearchCareGiverServiceTest {
         Page<ProfileResponse> responses = result.get();
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -359,6 +395,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("averageRating") != null));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -377,6 +414,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("averageRating") != null));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -396,6 +434,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, responses.getTotalElements());
         verify(careGiverRepository).findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
                 eq("John"), eq("Cardiology"), any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -414,6 +453,7 @@ class SearchCareGiverServiceTest {
         Page<ProfileResponse> responses = result.get();
         assertEquals(1, responses.getTotalElements());
         verify(careGiverRepository).findByNameContainingIgnoreCase(eq("Smith"), any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -432,6 +472,7 @@ class SearchCareGiverServiceTest {
         Page<ProfileResponse> responses = result.get();
         assertEquals(1, responses.getTotalElements());
         verify(careGiverRepository).findBySpecialityContainingIgnoreCase(eq("Pediatrics"), any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -451,6 +492,7 @@ class SearchCareGiverServiceTest {
         // Verify parameters were corrected
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -473,6 +515,7 @@ class SearchCareGiverServiceTest {
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("averageRating") != null &&
                         pageable1.getSort().getOrderFor("ratingCount") != null));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -495,6 +538,7 @@ class SearchCareGiverServiceTest {
         // Verify that invalid parameters were corrected (page=0, size=10)
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageNumber() == 0 && pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -512,6 +556,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 50));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -529,6 +574,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -544,6 +590,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, result.size());
         assertEquals("Dr. John", result.get(0));
         verify(careGiverRepository).findNameSuggestions("Dr");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -554,6 +601,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -564,6 +612,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -574,6 +623,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findNameSuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -589,6 +639,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, result.size());
         assertEquals("Dr", result.get(0));
         verify(careGiverRepository).findNameSuggestions("Dr");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -604,6 +655,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, result.size());
         assertEquals("Cardiology", result.get(0));
         verify(careGiverRepository).findSpecialitySuggestions("Card");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -614,6 +666,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -624,6 +677,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -634,6 +688,7 @@ class SearchCareGiverServiceTest {
         // Then
         assertEquals(0, result.size());
         verify(careGiverRepository, never()).findSpecialitySuggestions(anyString());
+        verify(mockCounter, never()).increment();
     }
 
     @Test
@@ -649,6 +704,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, result.size());
         assertEquals("Cardiology", result.get(0));
         verify(careGiverRepository).findSpecialitySuggestions("Ca");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -687,6 +743,7 @@ class SearchCareGiverServiceTest {
         // Then
         List<ProfileResponse> responses = result.get();
         assertEquals(0, responses.size());
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     // ADDITIONAL TESTS FOR COMPLETE COVERAGE
@@ -707,6 +764,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("name").getDirection() == Sort.Direction.ASC));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -725,6 +783,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("name").getDirection() == Sort.Direction.DESC));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -743,6 +802,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("speciality") != null));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -761,6 +821,7 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         // Should call findAll because whitespace filters are treated as null
         verify(careGiverRepository).findAll(any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -780,6 +841,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, responses.getTotalElements());
         // Verify that the trimmed name "John" was used
         verify(careGiverRepository).findByNameContainingIgnoreCase(eq("John"), any(Pageable.class));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -795,6 +857,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, result.size());
         assertEquals("Dr. John", result.get(0));
         verify(careGiverRepository).findNameSuggestions("Dr");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -810,6 +873,7 @@ class SearchCareGiverServiceTest {
         assertEquals(1, result.size());
         assertEquals("Cardiology", result.get(0));
         verify(careGiverRepository).findSpecialitySuggestions("Card");
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     // Test constructor for complete coverage
@@ -817,9 +881,10 @@ class SearchCareGiverServiceTest {
     void testConstructor() {
         // Given
         CareGiverRepository mockRepository = mock(CareGiverRepository.class);
+        MonitoringConfig mockMonitoringConfig = mock(MonitoringConfig.class);
 
         // When
-        SearchCareGiverService service = new SearchCareGiverService(mockRepository);
+        SearchCareGiverService service = new SearchCareGiverService(mockRepository, mockMonitoringConfig);
 
         // Then
         assertNotNull(service);
@@ -890,6 +955,7 @@ class SearchCareGiverServiceTest {
         // Verify that size 100 is allowed (not corrected to 10)
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 100));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -909,6 +975,7 @@ class SearchCareGiverServiceTest {
         // Verify that size 101 was corrected to 10
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -954,6 +1021,7 @@ class SearchCareGiverServiceTest {
         // Should use default "averageRating" since no match was found
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getSort().getOrderFor("averageRating") != null));
+        verify(mockCounter, atLeastOnce()).increment();
     }
 
     @Test
@@ -972,7 +1040,6 @@ class SearchCareGiverServiceTest {
         assertEquals(2, responses.getTotalElements());
         verify(careGiverRepository).findAll(argThat((Pageable pageable1) ->
                 pageable1.getPageSize() == 10));
+        verify(mockCounter, atLeastOnce()).increment();
     }
-
-
 }
