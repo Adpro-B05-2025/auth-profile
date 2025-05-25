@@ -39,3 +39,4 @@ out/
 # Environment variables and sensitive configurations
 .env
 application-dev.properties
+monitoring/grafana-agent.yml

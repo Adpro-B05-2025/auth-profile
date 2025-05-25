@@ -1,46 +1,39 @@
 version: '3.8'
 
 services:
-  # Prometheus for metrics collection
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: pandacare-prometheus
+  # Grafana Agent - handles everything securely
+  grafana-agent:
+    image: grafana/agent:latest
+    container_name: pandacare-grafana-agent
     ports:
-      - "9090:9090"
+      - "12345:12345"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
+      - ./monitoring/grafana-agent.yml:/etc/grafana-agent.yml
+    environment:
+      - GRAFANA_CLOUD_USER=${GRAFANA_CLOUD_USER}
+      - GRAFANA_CLOUD_API_KEY=${GRAFANA_TOKEN}
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+      - '-config.file=/etc/grafana-agent.yml'
+      - '-metrics.wal-directory=/tmp/grafana-agent-wal'
     restart: unless-stopped
     networks:
       - monitoring
 
-  # Grafana for visualization
-  grafana:
+  # Local Grafana for development (optional)
+  grafana-local:
     image: grafana/grafana:latest
-    container_name: pandacare-grafana
+    container_name: pandacare-grafana-local
     ports:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=pandacare123
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_LOCAL_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_LOCAL_PASSWORD:-pandacare123}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
     restart: unless-stopped
     networks:
       - monitoring
-    depends_on:
-      - prometheus
 
   # Node Exporter for system metrics
   node-exporter:
@@ -61,25 +54,7 @@ services:
     networks:
       - monitoring
 
-  # cAdvisor for container metrics
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    container_name: pandacare-cadvisor
-    ports:
-      - "8080:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    privileged: true
-    restart: unless-stopped
-    networks:
-      - monitoring
-
 volumes:
-  prometheus_data:
   grafana_data:
 
 networks:
