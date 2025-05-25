@@ -1,4 +1,4 @@
-package id.ac.ui.cs.advprog.authprofile.dto.rating;
+package id.ac.ui.cs.advprog.authprofile.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 @Setter
