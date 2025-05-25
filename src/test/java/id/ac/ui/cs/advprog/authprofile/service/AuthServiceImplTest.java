@@ -1,11 +1,14 @@
 package id.ac.ui.cs.advprog.authprofile.service;
 
+import id.ac.ui.cs.advprog.authprofile.config.MonitoringConfig;
 import id.ac.ui.cs.advprog.authprofile.dto.request.BaseRegisterRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.LoginRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterCareGiverRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.request.RegisterPacillianRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.JwtResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
+import id.ac.ui.cs.advprog.authprofile.exception.EmailAlreadyExistsException;
+import id.ac.ui.cs.advprog.authprofile.exception.ResourceNotFoundException;
 import id.ac.ui.cs.advprog.authprofile.factory.CareGiverFactory;
 import id.ac.ui.cs.advprog.authprofile.factory.PacillianFactory;
 import id.ac.ui.cs.advprog.authprofile.factory.UserFactory;
@@ -19,27 +22,34 @@ import id.ac.ui.cs.advprog.authprofile.repository.PacillianRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.RoleRepository;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
 import id.ac.ui.cs.advprog.authprofile.security.jwt.JwtUtils;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,6 +85,33 @@ class AuthServiceImplTest {
     @Mock
     private CareGiverFactory careGiverFactory;
 
+    @Mock
+    private MonitoringConfig monitoringConfig;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter loginAttempts;
+
+    @Mock
+    private Counter loginSuccessful;
+
+    @Mock
+    private Counter loginFailed;
+
+    @Mock
+    private Counter registrationAttempts;
+
+    @Mock
+    private AtomicInteger activeSessions;
+
+    @Mock
+    private Timer timer;
+
+    @Mock
+    private Timer.Sample timerSample;
+
     @InjectMocks
     private AuthServiceImpl authServiceImpl;
 
@@ -91,6 +128,9 @@ class AuthServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        // Setup MonitoringConfig mocks FIRST
+        setupMonitoringMocks();
+
         // Setup common test data
         loginRequest = new LoginRequest("test@example.com", "password");
 
@@ -102,8 +142,6 @@ class AuthServiceImplTest {
         pacillianRequest.setAddress("Test Address");
         pacillianRequest.setPhoneNumber("081234567890");
         pacillianRequest.setMedicalHistory("No significant history");
-
-
 
         careGiverRequest = new RegisterCareGiverRequest();
         careGiverRequest.setEmail("caregiver@example.com");
@@ -166,13 +204,45 @@ class AuthServiceImplTest {
         invalidToken = "invalid.jwt.token";
     }
 
+    private void setupMonitoringMocks() {
+        // Setup MonitoringConfig method returns
+        lenient().when(monitoringConfig.getLoginAttempts()).thenReturn(loginAttempts);
+        lenient().when(monitoringConfig.getLoginSuccessful()).thenReturn(loginSuccessful);
+        lenient().when(monitoringConfig.getLoginFailed()).thenReturn(loginFailed);
+        lenient().when(monitoringConfig.getRegistrationAttempts()).thenReturn(registrationAttempts);
+        lenient().when(monitoringConfig.getActiveSessions()).thenReturn(activeSessions);
+
+        // Use ReflectionTestUtils to set the meterRegistry field
+        ReflectionTestUtils.setField(monitoringConfig, "meterRegistry", meterRegistry);
+
+        // Setup MeterRegistry behavior - handle all variations of counter() calls
+        lenient().when(meterRegistry.timer(anyString(), anyString(), anyString())).thenReturn(timer);
+        lenient().when(meterRegistry.timer(anyString())).thenReturn(timer);
+
+        // Mock counter() method with varargs - this catches all parameter combinations
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(loginSuccessful);
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(loginSuccessful);
+
+        // Setup Counter behavior
+        lenient().doNothing().when(loginAttempts).increment();
+        lenient().doNothing().when(loginSuccessful).increment();
+        lenient().doNothing().when(loginFailed).increment();
+        lenient().doNothing().when(registrationAttempts).increment();
+
+        // Setup AtomicInteger behavior
+        lenient().when(activeSessions.incrementAndGet()).thenReturn(1);
+        lenient().when(activeSessions.get()).thenReturn(1);
+
+        // Setup Timer.Sample behavior
+        lenient().when(timerSample.stop(any(Timer.class))).thenReturn(1L);
+    }
+
     @Test
     void authenticateUser_ShouldReturnJwtResponse() {
         // Setup authentication and userDetails mocks
         Authentication authentication = mock(Authentication.class);
         UserDetails userDetails = mock(UserDetails.class);
 
-        // Now userDetails.getUsername() should return the user ID as a string
         when(userDetails.getUsername()).thenReturn("1");
 
         List<SimpleGrantedAuthority> authorities =
@@ -184,20 +254,24 @@ class AuthServiceImplTest {
                 .thenReturn(authentication);
         when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
 
-        // Find user by ID not email now
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        JwtResponse response = authServiceImpl.authenticateUser(loginRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        assertThat(response).isNotNull();
-        assertThat(response.getToken()).isEqualTo("test_jwt_token");
-        assertThat(response.getEmail()).isEqualTo("test@example.com");
-        assertThat(response.getId()).isEqualTo(1L);
-        assertThat(response.getRoles()).contains("ROLE_PACILLIAN");
+            JwtResponse response = authServiceImpl.authenticateUser(loginRequest);
 
-        verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
-        verify(jwtUtils).generateJwtToken(authentication);
-        verify(userRepository).findById(1L);
+            assertThat(response).isNotNull();
+            assertThat(response.getToken()).isEqualTo("test_jwt_token");
+            assertThat(response.getEmail()).isEqualTo("test@example.com");
+            assertThat(response.getId()).isEqualTo(1L);
+            assertThat(response.getRoles()).contains("ROLE_PACILLIAN");
+
+            verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
+            verify(jwtUtils).generateJwtToken(authentication);
+            verify(userRepository).findById(1L);
+        }
     }
 
     @Test
@@ -210,14 +284,17 @@ class AuthServiceImplTest {
 
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(authentication);
-        // Remove the unnecessary stubbing for jwtUtils.generateJwtToken
-        // when(jwtUtils.generateJwtToken(authentication)).thenReturn("test_jwt_token");
         when(userRepository.findById(1L)).thenReturn(Optional.empty());
 
-        // When & Then
-        assertThatThrownBy(() -> authServiceImpl.authenticateUser(loginRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("User not found");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
+
+            // When & Then
+            assertThatThrownBy(() -> authServiceImpl.authenticateUser(loginRequest))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("User not found");
+        }
     }
 
     @Test
@@ -229,18 +306,23 @@ class AuthServiceImplTest {
         when(factoryProvider.getFactory(pacillianRequest)).thenReturn(pacillianFactory);
         when(pacillianFactory.createUser(eq(pacillianRequest), anyString())).thenReturn(pacillian);
 
-        // when
-        String result = authServiceImpl.registerUser(pacillianRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // then
-        assertThat(result).isEqualTo("Pacillian registered successfully!");
+            // when
+            String result = authServiceImpl.registerUser(pacillianRequest);
 
-        verify(userRepository).existsByEmail(pacillianRequest.getEmail());
-        verify(userRepository).existsByNik(pacillianRequest.getNik());
-        verify(encoder).encode(pacillianRequest.getPassword());
-        verify(factoryProvider).getFactory(pacillianRequest);
-        verify(pacillianFactory).createUser(eq(pacillianRequest), anyString());
-        verify(pacillianRepository).save(pacillian);
+            // then
+            assertThat(result).isEqualTo("Pacillian registered successfully!");
+
+            verify(userRepository).existsByEmail(pacillianRequest.getEmail());
+            verify(userRepository).existsByNik(pacillianRequest.getNik());
+            verify(encoder).encode(pacillianRequest.getPassword());
+            verify(factoryProvider).getFactory(pacillianRequest);
+            verify(pacillianFactory).createUser(eq(pacillianRequest), anyString());
+            verify(pacillianRepository).save(pacillian);
+        }
     }
 
     @Test
@@ -248,14 +330,19 @@ class AuthServiceImplTest {
         // given
         when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(true);
 
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Email is already in use");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).existsByEmail(pacillianRequest.getEmail());
-        verify(pacillianRepository, never()).save(any(Pacillian.class));
-        verify(factoryProvider, never()).getFactory(any());
+            // when/then
+            assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
+                    .isInstanceOf(EmailAlreadyExistsException.class)
+                    .hasMessageContaining("Email is already in use");
+
+            verify(userRepository).existsByEmail(pacillianRequest.getEmail());
+            verify(pacillianRepository, never()).save(any(Pacillian.class));
+            verify(factoryProvider, never()).getFactory(any());
+        }
     }
 
     @Test
@@ -264,15 +351,20 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(pacillianRequest.getEmail())).thenReturn(false);
         when(userRepository.existsByNik(pacillianRequest.getNik())).thenReturn(true);
 
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("NIK is already in use");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).existsByEmail(pacillianRequest.getEmail());
-        verify(userRepository).existsByNik(pacillianRequest.getNik());
-        verify(pacillianRepository, never()).save(any(Pacillian.class));
-        verify(factoryProvider, never()).getFactory(any());
+            // when/then
+            assertThatThrownBy(() -> authServiceImpl.registerUser(pacillianRequest))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("NIK is already in use");
+
+            verify(userRepository).existsByEmail(pacillianRequest.getEmail());
+            verify(userRepository).existsByNik(pacillianRequest.getNik());
+            verify(pacillianRepository, never()).save(any(Pacillian.class));
+            verify(factoryProvider, never()).getFactory(any());
+        }
     }
 
     @Test
@@ -284,18 +376,23 @@ class AuthServiceImplTest {
         when(factoryProvider.getFactory(careGiverRequest)).thenReturn(careGiverFactory);
         when(careGiverFactory.createUser(eq(careGiverRequest), anyString())).thenReturn(careGiver);
 
-        // when
-        String result = authServiceImpl.registerUser(careGiverRequest);
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // then
-        assertThat(result).isEqualTo("CareGiver registered successfully!");
+            // when
+            String result = authServiceImpl.registerUser(careGiverRequest);
 
-        verify(userRepository).existsByEmail(careGiverRequest.getEmail());
-        verify(userRepository).existsByNik(careGiverRequest.getNik());
-        verify(encoder).encode(careGiverRequest.getPassword());
-        verify(factoryProvider).getFactory(careGiverRequest);
-        verify(careGiverFactory).createUser(eq(careGiverRequest), anyString());
-        verify(careGiverRepository).save(careGiver);
+            // then
+            assertThat(result).isEqualTo("CareGiver registered successfully!");
+
+            verify(userRepository).existsByEmail(careGiverRequest.getEmail());
+            verify(userRepository).existsByNik(careGiverRequest.getNik());
+            verify(encoder).encode(careGiverRequest.getPassword());
+            verify(factoryProvider).getFactory(careGiverRequest);
+            verify(careGiverFactory).createUser(eq(careGiverRequest), anyString());
+            verify(careGiverRepository).save(careGiver);
+        }
     }
 
     @Test
@@ -303,14 +400,19 @@ class AuthServiceImplTest {
         // given
         when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(true);
 
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Email is already in use");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).existsByEmail(careGiverRequest.getEmail());
-        verify(careGiverRepository, never()).save(any(CareGiver.class));
-        verify(factoryProvider, never()).getFactory(any());
+            // when/then
+            assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
+                    .isInstanceOf(EmailAlreadyExistsException.class)
+                    .hasMessageContaining("Email is already in use");
+
+            verify(userRepository).existsByEmail(careGiverRequest.getEmail());
+            verify(careGiverRepository, never()).save(any(CareGiver.class));
+            verify(factoryProvider, never()).getFactory(any());
+        }
     }
 
     @Test
@@ -319,25 +421,28 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail(careGiverRequest.getEmail())).thenReturn(false);
         when(userRepository.existsByNik(careGiverRequest.getNik())).thenReturn(true);
 
-        // when/then
-        assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("NIK is already in use");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        verify(userRepository).existsByEmail(careGiverRequest.getEmail());
-        verify(userRepository).existsByNik(careGiverRequest.getNik());
-        verify(careGiverRepository, never()).save(any(CareGiver.class));
-        verify(factoryProvider, never()).getFactory(any());
+            // when/then
+            assertThatThrownBy(() -> authServiceImpl.registerUser(careGiverRequest))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("NIK is already in use");
+
+            verify(userRepository).existsByEmail(careGiverRequest.getEmail());
+            verify(userRepository).existsByNik(careGiverRequest.getNik());
+            verify(careGiverRepository, never()).save(any(CareGiver.class));
+            verify(factoryProvider, never()).getFactory(any());
+        }
     }
-
-    // Token validation tests updated to use user ID
 
     @Test
     void validateToken_WithValidToken_ShouldReturnValidResponse() {
         // given
         when(jwtUtils.validateJwtToken(validToken)).thenReturn(true);
-        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn("1"); // Now returns user ID
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user)); // Find by ID
+        when(jwtUtils.getUserIdFromJwtToken(validToken)).thenReturn("1");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         // when
         TokenValidationResponse response = authServiceImpl.validateToken(validToken);
@@ -410,15 +515,13 @@ class AuthServiceImplTest {
         assertThat(response.isValid()).isFalse();
     }
 
-
-
     @Test
     void generateTokenWithoutAuthentication_ShouldReturnToken() {
         // given
         String mockToken = "direct_jwt_token";
         String userId = "1";
 
-        // Setup JWT utils mock behavior - now using user ID
+        // Setup JWT utils mock behavior
         when(jwtUtils.generateJwtTokenFromUserId(userId)).thenReturn(mockToken);
 
         // when
@@ -428,7 +531,6 @@ class AuthServiceImplTest {
         assertThat(resultToken).isNotNull();
         assertThat(resultToken).isEqualTo(mockToken);
 
-        // Verify the JWT was generated with the user's ID
         verify(jwtUtils).generateJwtTokenFromUserId(userId);
     }
 
@@ -437,7 +539,6 @@ class AuthServiceImplTest {
         // Create a BaseRegisterRequest that we'll use with our factory
         BaseRegisterRequest unsupportedRequest = mock(BaseRegisterRequest.class);
 
-        // Mock the BaseRegisterRequest to return expected values
         when(unsupportedRequest.getEmail()).thenReturn("unsupported@example.com");
         when(unsupportedRequest.getNik()).thenReturn("1234567890123456");
         when(unsupportedRequest.getPassword()).thenReturn("password123");
@@ -446,27 +547,29 @@ class AuthServiceImplTest {
         User unsupportedUser = new User();
         unsupportedUser.setEmail("unsupported@example.com");
 
-        // Setup mocks to pass validation - using lenient() to be less strict
-        lenient().when(userRepository.existsByEmail(anyString())).thenReturn(false);
-        lenient().when(userRepository.existsByNik(anyString())).thenReturn(false);
+        // Setup mocks to pass validation
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByNik(anyString())).thenReturn(false);
 
-        // Mock the encoder
         when(encoder.encode(anyString())).thenReturn("encoded_password");
 
-        // Mock the factory to return our unsupported user type - using lenient() and any()
         UserFactory mockFactory = mock(UserFactory.class);
         when(factoryProvider.getFactory(any())).thenReturn(mockFactory);
-        lenient().when(mockFactory.createUser(any(), any())).thenReturn(unsupportedUser);
+        when(mockFactory.createUser(any(), any())).thenReturn(unsupportedUser);
 
-        // Act and Assert - verify that the exception is thrown with the correct message
-        assertThatThrownBy(() -> authServiceImpl.registerUser(unsupportedRequest))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unsupported user type");
+        // Mock Timer.start static method
+        try (MockedStatic<Timer> timerMock = mockStatic(Timer.class)) {
+            timerMock.when(() -> Timer.start(any(MeterRegistry.class))).thenReturn(timerSample);
 
-        // Verify our mocks were called as expected
-        verify(factoryProvider).getFactory(any());
-        verify(mockFactory).createUser(any(), any());
-        verify(pacillianRepository, never()).save(any());
-        verify(careGiverRepository, never()).save(any());
+            // Act and Assert
+            assertThatThrownBy(() -> authServiceImpl.registerUser(unsupportedRequest))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Unsupported user type");
+
+            verify(factoryProvider).getFactory(any());
+            verify(mockFactory).createUser(any(), any());
+            verify(pacillianRepository, never()).save(any());
+            verify(careGiverRepository, never()).save(any());
+        }
     }
 }
