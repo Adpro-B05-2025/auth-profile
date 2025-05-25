@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.authprofile.service;
 
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.RatingSummaryResponse;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -79,4 +80,9 @@ public interface IProfileService {
      * @return list of matching care givers with minimal information
      */
     List<ProfileResponse> searchCareGiversLite(String name, String speciality, DayOfWeek dayOfWeek, LocalTime time);
+
+    RatingSummaryResponse getRatingSummaryForCurrentUser();
+
+    RatingSummaryResponse getRatingSummaryForCaregiver(Long id);
+
 }

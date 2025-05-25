@@ -3,6 +3,7 @@ package id.ac.ui.cs.advprog.authprofile.controller;
 import id.ac.ui.cs.advprog.authprofile.dto.request.UpdateProfileRequest;
 import id.ac.ui.cs.advprog.authprofile.dto.response.MessageResponse;
 import id.ac.ui.cs.advprog.authprofile.dto.response.ProfileResponse;
+import id.ac.ui.cs.advprog.authprofile.dto.response.RatingSummaryResponse;
 import id.ac.ui.cs.advprog.authprofile.security.annotation.RequiresAuthorization;
 import id.ac.ui.cs.advprog.authprofile.service.IProfileService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,7 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@CrossOrigin(origins = "*", maxAge = 3600)
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api")
 public class ProfileController {
@@ -110,5 +111,18 @@ public class ProfileController {
     public ResponseEntity<ProfileResponse> getCareGiverProfile(@PathVariable Long id) {
         ProfileResponse profile = profileService.getCareGiverProfileLite(id);
         return ResponseEntity.ok(profile);
+    }
+
+    @GetMapping("/profile/ratings")
+    public ResponseEntity<RatingSummaryResponse> getRatingsForCurrentUser() {
+        RatingSummaryResponse ratingSummary = profileService.getRatingSummaryForCurrentUser();
+        return ResponseEntity.ok(ratingSummary);
+    }
+
+    @GetMapping("/caregiver/{id}/summary")
+    @RequiresAuthorization(action = "VIEW_CAREGIVER", resourceIdExpression = "#id")
+    public ResponseEntity<RatingSummaryResponse> getCaregiverRatingSummary(@PathVariable Long id) {
+        RatingSummaryResponse ratingSummary = profileService.getRatingSummaryForCaregiver(id);
+        return ResponseEntity.ok(ratingSummary);
     }
 }
