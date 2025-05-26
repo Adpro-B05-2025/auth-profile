@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -14,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d
+      - ./database/init:/docker-entrypoint-initdb.d # Make sure this path is correct relative to docker-compose.yml
     networks:
       - pandacare-network
     restart: unless-stopped
@@ -30,7 +28,12 @@ services:
   auth-profile:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile  # This should be your runtime Dockerfile
+      args:
+        # This 'APP_JAR' key must match the 'ARG APP_JAR' instruction in your Dockerfile
+        - APP_JAR=auth-profile.jar
+        # You could also use the map syntax:
+        # APP_JAR: auth-profile.jar
     container_name: pandacare-auth-profile
     environment:
       # Database Configuration
@@ -69,7 +72,10 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - app_logs:/app/logs
+      # You had two volume mounts for logs. Keeping the host bind mount for easier access.
+      # If you also intended to use the named volume 'app_logs', ensure it's defined below
+      # and uncomment if needed. For now, only ./logs is active for the app.
+      # - app_logs:/app/logs
       - ./logs:/app/logs  # Mount host directory for easy log access
     networks:
       - pandacare-network
@@ -81,22 +87,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s  # Give more time for Spring Boot to start
-    deploy:
+    deploy: # This section is primarily for Docker Swarm. It might be ignored by standalone docker-compose up.
       resources:
         limits:
           memory: ${CONTAINER_MEMORY_LIMIT:-2G}
-          cpus: ${CONTAINER_CPU_LIMIT:-1.0} # Corrected
+          cpus: ${CONTAINER_CPU_LIMIT:-1.0}
         reservations:
           memory: ${CONTAINER_MEMORY_RESERVATION:-1G}
-          cpus: ${CONTAINER_CPU_RESERVATION:-0.5} # Corrected
+          cpus: ${CONTAINER_CPU_RESERVATION:-0.5}
 
 volumes:
-  postgres_data:
+  postgres_data: # Defines the named volume for PostgreSQL data persistence
     driver: local
-  app_logs:
+  app_logs: # Defines the named volume 'app_logs'. It's currently not used by auth-profile above.
     driver: local
 
 networks:
   pandacare-network:
     driver: bridge
-    name: pandacare-network
+    name: pandacare-network # Explicitly naming the network
