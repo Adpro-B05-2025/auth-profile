@@ -1,0 +1,207 @@
+name: Deploy PandaCare Auth-Profile to EC2
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Generate test report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Gradle Tests
+          path: build/test-results/test/*.xml
+          reporter: java-junit
+
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to EC2
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create deployment package
+        run: |
+          # Create a clean deployment package
+          mkdir -p deployment
+          
+          # Copy necessary files (exclude build artifacts, logs, etc.)
+          rsync -av --progress . deployment/ \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='build' \
+            --exclude='.gradle' \
+            --exclude='logs' \
+            --exclude='*.log' \
+            --exclude='*.tar.gz' \
+            --exclude='deployment'
+          
+          # Create tarball
+          cd deployment
+          tar -czf ../pandacare-deployment.tar.gz .
+
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "pandacare-deployment.tar.gz"
+          target: "/home/ec2-user/"
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Navigate to home directory
+            cd /home/ec2-user
+            
+            # Backup current deployment (if exists)
+            if [ -d "auth-profile" ]; then
+              echo "🔄 Backing up current deployment..."
+              sudo rm -rf auth-profile-backup
+              mv auth-profile auth-profile-backup
+            fi
+            
+            # Extract new deployment
+            echo "📦 Extracting new deployment..."
+            mkdir -p auth-profile
+            cd auth-profile
+            tar -xzf ../pandacare-deployment.tar.gz
+            
+            # Create production environment file
+            echo "⚙️  Setting up production environment..."
+            cat > .env << EOF
+            # Database Configuration
+            POSTGRES_DB=auth-profile-prod
+            POSTGRES_USER=pandacare_user
+            POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth-profile-prod
+            DATASOURCE_USERNAME=pandacare_user
+            DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
+            
+            # JWT Configuration
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRATION_MS=86400000
+            
+            # Application Configuration
+            SERVER_PORT=8081
+            SPRING_PROFILES_ACTIVE=docker
+            
+            # Service Integration
+            RATING_URL=http://localhost:8083
+            
+            # Logging Configuration
+            LOGGING_LEVEL_ROOT=INFO
+            LOGGING_LEVEL_AUTH_PROFILE=INFO
+            LOGGING_FILE_NAME=/app/logs/auth-profile.log
+            
+            # Monitoring Configuration
+            MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never
+            MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+            
+            # Performance Configuration
+            SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=5
+            SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=20
+            CONTAINER_MEMORY_LIMIT=1G
+            CONTAINER_CPU_LIMIT=0.5
+            EOF
+            
+            # Create logs directory
+            mkdir -p logs
+            
+            # Stop existing services
+            echo "🛑 Stopping existing services..."
+            docker-compose down || true
+            
+            # Clean up unused Docker resources
+            echo "🧹 Cleaning up Docker resources..."
+            docker system prune -f || true
+            
+            # Build and start services
+            echo "🚀 Starting services..."
+            docker-compose up --build -d
+            
+            # Wait for application to start
+            echo "⏳ Waiting for application to start..."
+            sleep 60
+            
+            # Health check
+            echo "🏥 Performing health check..."
+            max_attempts=10
+            attempt=1
+            
+            while [ $attempt -le $max_attempts ]; do
+              if curl -f http://localhost:8081/actuator/health > /dev/null 2>&1; then
+                echo "✅ Application is healthy!"
+                break
+              else
+                echo "⏳ Health check attempt $attempt/$max_attempts failed, retrying..."
+                sleep 10
+                attempt=$((attempt + 1))
+              fi
+            done
+            
+            if [ $attempt -gt $max_attempts ]; then
+              echo "❌ Application failed to start properly"
+              echo "📋 Recent logs:"
+              docker-compose logs --tail=50 auth-profile
+              exit 1
+            fi
+            
+            # Show running containers
+            echo "📊 Deployment Status:"
+            docker-compose ps
+            
+            echo "🎉 Deployment completed successfully!"
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment to EC2 completed successfully!"
+          else
+            echo "❌ Deployment to EC2 failed!"
+          fi
+
+  cleanup:
+    runs-on: ubuntu-latest
+    name: Cleanup
+    needs: [test, deploy]
+    if: always()
+
+    steps:
+      - name: Cleanup deployment artifacts
+        run: |
+          echo "🧹 Cleaning up deployment artifacts..."
+          # Cleanup happens automatically when runner terminates
