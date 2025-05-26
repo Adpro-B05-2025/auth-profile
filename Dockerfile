@@ -1,39 +1,22 @@
-# Multi-stage build for optimized production image
-FROM gradle:8.13-jdk21 AS build
+# This should be the content of /home/ec2-user/auth-profile/Dockerfile on EC2
+# This is a RUNTIME Dockerfile, expecting a pre-built JAR.
 
-# Set working directory
-WORKDIR /app
-
-# Copy gradle wrapper and configuration files first (for better layer caching)
-COPY gradlew gradlew.bat ./
-COPY gradle/ gradle/
-COPY build.gradle.kts settings.gradle.kts ./
-
-# Make gradlew executable
-RUN chmod +x gradlew
-
-# Download dependencies (cached layer if gradle files don't change)
-RUN ./gradlew dependencies --no-daemon
-
-# Copy source code
-COPY src/ src/
-
-# Build the application (skip tests for faster build, run them in CI/CD)
-RUN ./gradlew bootJar --no-daemon -x test
-
-# Production stage with optimized JRE
 FROM eclipse-temurin:21-jre-jammy
 
-# Set metadata
 LABEL maintainer="PandaCare Team" \
       description="Auth-Profile Service for PandaCare Application" \
       version="1.0.0" \
       service="auth-profile"
 
-# Create application directory and user for security
+# ARG instruction to receive the JAR filename from docker-compose.yml build.args
+# The default value matches what we've been using.
+ARG APP_JAR="auth-profile.jar"
+
+# Create a non-root user and group for better security
 RUN groupadd -r pandacare && useradd -r -g pandacare -s /bin/false pandacare
 
-# Install required packages for monitoring and debugging
+# Install essential packages that might be needed (e.g., for health checks, debugging)
+# dumb-init is a lightweight init system for containers, helps with signal handling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     jq \
@@ -41,22 +24,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Create application directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Create logs directory
+# Create logs directory and set ownership before copying application files
+# This is where the application will write its logs if configured to do so.
 RUN mkdir -p /app/logs && chown -R pandacare:pandacare /app
 
-# Copy the built JAR from build stage
-COPY --from=build /app/build/libs/*-SNAPSHOT.jar app.jar
+# Copy the pre-built application JAR into the container
+# ${APP_JAR} will be replaced by the value from docker-compose.yml (e.g., "auth-profile.jar")
+COPY ${APP_JAR} app.jar
 
-# Set ownership of the application files
+# Set ownership of all application files to the non-root user
 RUN chown -R pandacare:pandacare /app
 
-# Switch to non-root user
+# Switch to the non-root user
 USER pandacare
 
-# Set JVM options optimized for containerized environment
+# Set JVM options for optimal performance in a containerized environment
+# Customize these based on your application's needs and available resources.
 ENV JAVA_OPTS="-server \
                -XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
@@ -66,32 +52,36 @@ ENV JAVA_OPTS="-server \
                -XX:+UseStringDeduplication \
                -XX:+OptimizeStringConcat \
                -XX:+HeapDumpOnOutOfMemoryError \
-               -XX:HeapDumpPath=/app/logs/ \
+               -XX:HeapDumpPath=/app/logs/oom_dump.hprof \
                -Djava.security.egd=file:/dev/./urandom \
                -Djava.awt.headless=true \
                -Dfile.encoding=UTF-8 \
                -Duser.timezone=Asia/Jakarta"
 
-# Application configuration
+# Default environment variables for the application.
+# These will be overridden by values from the .env file loaded by docker-compose.
 ENV SERVER_PORT=8081 \
     SPRING_PROFILES_ACTIVE=docker \
     MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics,info \
     MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=when_authorized \
     LOGGING_LEVEL_ROOT=INFO \
+    LOGGING_LEVEL_AUTH_PROFILE=DEBUG \
     LOGGING_FILE_NAME=/app/logs/auth-profile.log
-
-# Health check with proper timeout and intervals
+# Health check for the application to ensure it starts correctly
+# Uses SERVER_PORT which will be resolved from environment variables at runtime.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -f http://localhost:${SERVER_PORT}/actuator/health || exit 1
 
-# Expose port
+# Expose the application port (will be resolved from SERVER_PORT env var at runtime)
 EXPOSE ${SERVER_PORT}
 
-# Create volumes for logs and temporary files
+# Define mount points for persistent data (logs) and temporary files.
+# The actual mounting to host paths or named volumes is done in docker-compose.yml.
 VOLUME ["/app/logs", "/tmp"]
 
-# Use dumb-init to handle signals properly
+# Use dumb-init as the entrypoint to properly handle signals and reap zombie processes
 ENTRYPOINT ["dumb-init", "--"]
 
-# Run the application with optimized startup
+# Command to run the application JAR
+# 'exec' allows the Java process to become PID 1 under dumb-init, helping with signal handling.
 CMD ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

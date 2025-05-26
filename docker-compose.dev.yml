@@ -1,0 +1,68 @@
+# docker-compose.dev.yml
+# For local development - builds auth-profile from source using Dockerfile.dev
+
+services:
+  auth-profile:
+    build:
+      context: . # Use the current directory as the build context
+      dockerfile: Dockerfile.dev # Specify your multi-stage Dockerfile for local builds
+    container_name: pandacare-auth-profile-dev # Unique name for the dev container
+    ports:
+      # Use SERVER_PORT from .env, default to 8081 if not set
+      - "${SERVER_PORT:-8081}:${SERVER_PORT:-8081}"
+    env_file:
+      - .env # Load environment variables from your local .env file
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be healthy
+    volumes:
+      # Mount local logs directory to container's log path for easy access
+      - ./logs:/app/logs
+      # Optional: For live code reloading with Spring Boot DevTools (if you use them)
+      # You might need to adjust your Dockerfile.dev's build stage to not include devtools in the final JAR
+      # or have a specific dev stage that keeps source code.
+      # - ./src/main/java:/app/src/main/java
+      # - ./src/main/resources:/app/src/main/resources
+    networks:
+      - pandacare-dev-network
+    restart: unless-stopped
+    healthcheck: # Re-defining here for clarity or if different from your main compose
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT:-8081}/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: pandacare-postgres-dev # Unique name for the dev database container
+    environment:
+      # These should be defined in your .env file
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432" # Expose PostgreSQL on the default port
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data # Persistent data for dev database
+      - ./database/init:/docker-entrypoint-initdb.d # For initial DB scripts (if you have them)
+    networks:
+      - pandacare-dev-network
+    restart: unless-stopped
+    env_file: .env # Also uses .env; ensure variables don't clash or are specific
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data_dev: # Named volume for dev database
+    driver: local
+
+networks:
+  pandacare-dev-network: # Dedicated network for dev services
+    driver: bridge
+    name: pandacare-dev-network # Explicitly naming helps avoid conflicts
