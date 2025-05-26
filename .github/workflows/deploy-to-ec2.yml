@@ -1,6 +1,5 @@
 name: CI/CD - Test and Deploy PandaCare Auth-Profile
 
-## Run CI jobs on all branches by default
 on:
   push:
     branches: [ main, develop, staging, production ]
@@ -8,8 +7,8 @@ on:
     branches: [ main, develop, staging, production ]
 
 jobs:
-  test:
-    name: Run tests
+  build_and_test:
+    name: Build and Run tests
     runs-on: ubuntu-22.04
     steps:
       - name: Check out the Git repository
@@ -28,11 +27,29 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test
 
+      - name: Build Spring Boot JAR
+        run: ./gradlew bootJar
+
+      - name: Rename JAR for consistency
+        run: |
+          jar_file=$(find build/libs -name '*.jar' -type f -print -quit)
+          if [[ -z "$jar_file" ]]; then
+            echo "Error: No JAR file found in build/libs. Make sure './gradlew bootJar' or './gradlew build' produces a JAR."
+            exit 1
+          fi
+          mv "$jar_file" build/libs/auth-profile.jar
+          echo "Renamed JAR to auth-profile.jar"
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar-artifact
+          path: build/libs/auth-profile.jar
+
   deploy:
     runs-on: ubuntu-latest
     name: Deploy to EC2
-    needs: test
-    # Deploy on push to any of these branches (not just main)
+    needs: build_and_test
     if: |
       github.event_name == 'push' && (
         github.ref == 'refs/heads/main' ||
@@ -42,13 +59,18 @@ jobs:
       )
 
     steps:
-      - name: Checkout code
+      - name: Checkout code (for Dockerfile, docker-compose.yml, etc.)
         uses: actions/checkout@v4
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar-artifact
+          path: deployment/
 
       - name: Determine environment
         id: env
         run: |
-          # Set environment based on branch
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "environment=production" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
@@ -79,7 +101,7 @@ jobs:
             echo "hikari_max=30" >> $GITHUB_OUTPUT
             echo "memory_limit=1.5G" >> $GITHUB_OUTPUT
             echo "cpu_limit=0.75" >> $GITHUB_OUTPUT
-          else
+          else # Default case
             echo "environment=production" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
             echo "log_level=WARN" >> $GITHUB_OUTPUT
@@ -91,34 +113,56 @@ jobs:
             echo "cpu_limit=1.0" >> $GITHUB_OUTPUT
           fi
           
+          # MODIFIED: Always use the single RATING_SERVICE_URL secret
+          echo "rating_url=${{ secrets.RATING_SERVICE_URL }}" >> $GITHUB_OUTPUT
+          
           echo "🌍 Deploying to environment: ${{ steps.env.outputs.environment }}"
           echo "🗄️  Database name: ${{ steps.env.outputs.db_name }}"
+          echo "📡 Rating Service URL: ${{ steps.env.outputs.rating_url }}"
 
-      - name: Create deployment package
+      - name: Prepare deployment package
         run: |
-          # Create a clean deployment package
-          mkdir -p deployment
+          echo "Contents of deployment/ after JAR download:"
+          ls -l deployment/
+
+          if [ -f "Dockerfile" ]; then
+            cp Dockerfile deployment/Dockerfile
+            echo "Copied existing Dockerfile to deployment/Dockerfile"
+          else
+            echo "Error: Dockerfile not found in repository root. This file is expected to be your runtime Dockerfile."
+            exit 1
+          fi
+
+          if [ -f "docker-compose.yml" ]; then
+            cp docker-compose.yml deployment/docker-compose.yml
+            echo "Copied docker-compose.yml to deployment/"
+          else
+            echo "Error: docker-compose.yml not found in repository root."
+            exit 1
+          fi
           
-          # Copy necessary files (exclude build artifacts, logs, etc.)
-          rsync -av --progress . deployment/ \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='build' \
-            --exclude='.gradle' \
-            --exclude='logs' \
-            --exclude='*.log' \
-            --exclude='*.tar.gz' \
-            --exclude='deployment'
+          if [ -d "database/init" ]; then
+            mkdir -p deployment/database/init
+            cp -r database/init/. deployment/database/init/
+            echo "Copied database/init scripts to deployment/database/init/"
+          else
+            echo "No database/init directory found to copy."
+          fi
           
-          # Add deployment info
           echo "BRANCH=${{ github.ref_name }}" >> deployment/.deploy-info
           echo "COMMIT=${{ github.sha }}" >> deployment/.deploy-info
           echo "ENVIRONMENT=${{ steps.env.outputs.environment }}" >> deployment/.deploy-info
           echo "DEPLOYED_AT=$(date -u)" >> deployment/.deploy-info
           
-          # Create tarball
+          echo "--- Contents of deployment directory before taring: ---"
+          ls -R deployment
+          echo "--------------------------------------------------------"
+          
           cd deployment
           tar -czf ../pandacare-deployment.tar.gz .
+          echo "Deployment package created: pandacare-deployment.tar.gz"
+          cd ..
+          ls -l pandacare-deployment.tar.gz
 
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -136,153 +180,143 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Navigate to home directory
             cd /home/ec2-user
             
-            # Set environment variables
-            BRANCH="${{ github.ref_name }}"
-            ENVIRONMENT="${{ steps.env.outputs.environment }}"
-            DB_NAME="${{ steps.env.outputs.db_name }}"
+            APP_NAME="auth-profile"
+            DEPLOYMENT_DIR="/home/ec2-user/$APP_NAME"
+            BACKUP_DIR="/home/ec2-user/${APP_NAME}-backup-$(date +%Y%m%d-%H%M%S)"
+            DEPLOYMENT_ARCHIVE="pandacare-deployment.tar.gz"
+            JAR_ARG_NAME_FOR_DOCKERFILE="APP_JAR" 
+            JAR_FILENAME_IN_PACKAGE="auth-profile.jar"
+
+            echo "🚀 Deploying branch: ${{ github.ref_name }}"
+            echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
+            echo "🗄️  Database: ${{ steps.env.outputs.db_name }}"
+            echo "📡 Rating URL for .env: ${{ steps.env.outputs.rating_url }}"
             
-            echo "🚀 Deploying branch: $BRANCH"
-            echo "🌍 Environment: $ENVIRONMENT"
-            echo "🗄️  Database: $DB_NAME"
-            
-            # Backup current deployment (if exists)
-            if [ -d "auth-profile" ]; then
-              echo "🔄 Backing up current deployment..."
-              sudo rm -rf "auth-profile-backup-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
-              mv auth-profile "auth-profile-backup-$(date +%Y%m%d-%H%M%S)"
+            if [ -d "$DEPLOYMENT_DIR" ]; then
+              echo "🔄 Backing up current deployment from $DEPLOYMENT_DIR to $BACKUP_DIR..."
+              mv "$DEPLOYMENT_DIR" "$BACKUP_DIR" || echo "Warning: Failed to move old deployment for backup."
             fi
             
-            # Extract new deployment
-            echo "📦 Extracting new deployment..."
-            mkdir -p auth-profile
-            cd auth-profile
-            tar -xzf ../pandacare-deployment.tar.gz
+            echo "📦 Creating $DEPLOYMENT_DIR and extracting $DEPLOYMENT_ARCHIVE..."
+            mkdir -p "$DEPLOYMENT_DIR"
+            tar -xzf "$DEPLOYMENT_ARCHIVE" -C "$DEPLOYMENT_DIR"
             
-            # Create environment file with FIXED values (no shell substitution)
-            echo "⚙️  Setting up $ENVIRONMENT environment..."
-            cat > .env << 'EOF'
-            # Deployment Info
+            cd "$DEPLOYMENT_DIR"
+            echo "Current directory: $(pwd)"
+            echo "Files in deployment directory:"
+            ls -la
+            
+            echo "⚙️  Setting up ${{ steps.env.outputs.environment }} environment file (.env)..."
+            cat > .env << EOF
             BRANCH=${{ github.ref_name }}
             ENVIRONMENT=${{ steps.env.outputs.environment }}
             DEPLOYED_AT=$(date -u)
-            
-            # Database Configuration
+            COMMIT_SHA=${{ github.sha }}
+
             POSTGRES_DB=${{ steps.env.outputs.db_name }}
             POSTGRES_USER=pandacare_user
             POSTGRES_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
+            
             DATASOURCE_URL=jdbc:postgresql://postgres:5432/${{ steps.env.outputs.db_name }}
             DATASOURCE_USERNAME=pandacare_user
             DATASOURCE_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
             
-            # JWT Configuration
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             JWT_EXPIRATION_MS=${{ secrets.JWT_EXPIRATION_MS }}
             
-            # Application Configuration
             SERVER_PORT=8081
             SPRING_PROFILES_ACTIVE=docker
             
-            # Service Integration
-            RATING_URL=http://localhost:8083
+            RATING_URL=${{ steps.env.outputs.rating_url }} # This now uses the single secret value
             
-            # Logging Configuration
             LOGGING_LEVEL_ROOT=${{ steps.env.outputs.log_level }}
             LOGGING_LEVEL_AUTH_PROFILE=${{ steps.env.outputs.log_level_app }}
             LOGGING_FILE_NAME=/app/logs/auth-profile.log
             
-            # Monitoring Configuration
-            MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics
+            MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics,info
             MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=${{ steps.env.outputs.health_details }}
             MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
             
-            # Performance Configuration
             SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=${{ steps.env.outputs.hikari_min }}
             SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=${{ steps.env.outputs.hikari_max }}
+            SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT=30000
+            
             CONTAINER_MEMORY_LIMIT=${{ steps.env.outputs.memory_limit }}
             CONTAINER_CPU_LIMIT=${{ steps.env.outputs.cpu_limit }}
             EOF
-            
-            # Remove version from docker-compose.yml to avoid warnings
-            sed -i '/^version:/d' docker-compose.yml
-            
-            # Create logs directory
+            echo ".env file created."
+
             mkdir -p logs
+            echo "'logs' directory ensured for host bind mount."
             
-            # Stop existing services
-            echo "🛑 Stopping existing services..."
-            docker-compose down || true
+            echo "🛑 Stopping existing services (if any)..."
+            docker-compose down --remove-orphans || true
             
-            # Clean up unused Docker resources
             echo "🧹 Cleaning up Docker resources..."
-            docker system prune -f || true
+            docker system prune -af || true
             
-            # Build and start services
-            echo "🚀 Starting services for $ENVIRONMENT environment..."
-            docker-compose up --build -d
+            echo "🚀 Building image and starting services for ${{ steps.env.outputs.environment }} environment..."
+            docker-compose up --build --build-arg ${JAR_ARG_NAME_FOR_DOCKERFILE}="${JAR_FILENAME_IN_PACKAGE}" -d
             
-            # Wait for application to start
             echo "⏳ Waiting for application to start..."
-            sleep 60
+            sleep 90
             
-            # Health check
-            echo "🏥 Performing health check..."
+            echo "🏥 Performing health check on http://localhost:8081/actuator/health..."
             max_attempts=10
             attempt=1
-            
+            HEALTH_CHECK_URL="http://localhost:8081/actuator/health"
+
             while [ $attempt -le $max_attempts ]; do
-              if curl -f http://localhost:8081/actuator/health > /dev/null 2>&1; then
+              if curl -sf "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
                 echo "✅ Application is healthy!"
                 break
               else
-                echo "⏳ Health check attempt $attempt/$max_attempts failed, retrying..."
-                sleep 10
+                echo "⏳ Health check attempt $attempt/$max_attempts failed for $HEALTH_CHECK_URL, retrying..."
+                sleep 15
                 attempt=$((attempt + 1))
               fi
             done
             
             if [ $attempt -gt $max_attempts ]; then
-              echo "❌ Application failed to start properly"
-              echo "📋 Recent logs:"
-              docker-compose logs --tail=50 auth-profile
+              echo "❌ Application failed to start properly after $max_attempts attempts."
+              echo "📋 Recent logs for $APP_NAME service (check service name in docker-compose.yml):"
+              docker-compose logs --tail=100 $APP_NAME 
               exit 1
             fi
             
-            # Show running containers
-            echo "📊 Deployment Status:"
+            echo "📊 Deployment Status (running containers):"
             docker-compose ps
             
-            # Show deployment info
-            echo "📋 Deployment Information:"
-            cat .deploy-info 2>/dev/null || echo "No deployment info available"
+            echo "📋 Deployment Information from .deploy-info:"
+            if [ -f ".deploy-info" ]; then
+              cat .deploy-info
+            else
+              echo "No .deploy-info file found."
+            fi
             
             echo "🎉 Deployment completed successfully!"
-            echo "🌍 Environment: $ENVIRONMENT"
-            echo "🌿 Branch: $BRANCH"
+            echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
+            echo "🌿 Branch: ${{ github.ref_name }}"
 
       - name: Notify deployment status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Deployment to EC2 completed successfully!"
-            echo "🌿 Branch: ${{ github.ref_name }}"
-            echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
-            echo "🗄️  Database: ${{ steps.env.outputs.db_name }}"
+            echo "✅ Deployment to EC2 for branch '${{ github.ref_name }}' to environment '${{ steps.env.outputs.environment }}' completed successfully!"
           else
-            echo "❌ Deployment to EC2 failed!"
-            echo "🌿 Branch: ${{ github.ref_name }}"
+            echo "❌ Deployment to EC2 for branch '${{ github.ref_name }}' FAILED!"
+            echo "Workflow run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
 
   cleanup:
     runs-on: ubuntu-latest
-    name: Cleanup
-    needs: [test, deploy]
+    name: Cleanup Runner
+    needs: [build_and_test, deploy]
     if: always()
 
     steps:
-      - name: Cleanup deployment artifacts
+      - name: Cleanup runner workspace
         run: |
-          echo "🧹 Cleaning up deployment artifacts..."
-          # Cleanup happens automatically when runner terminates
+          echo "🧹 GitHub Actions runner workspace is automatically cleaned up by GitHub."
