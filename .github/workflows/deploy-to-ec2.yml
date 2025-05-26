@@ -1,5 +1,6 @@
-name: Deploy PandaCare Auth-Profile to EC2
+name: CI/CD - Test and Deploy PandaCare Auth-Profile
 
+## Run CI jobs on all branches by default
 on:
   push:
     branches: [ main, develop ]
@@ -8,24 +9,23 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    name: Run Tests
-
+    name: Run tests
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout code
+      - name: Check out the Git repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up Java toolchain
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: gradle
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
 
-      - name: Make gradlew executable
+      - name: Add gradlew permission
         run: chmod +x gradlew
 
-      - name: Run tests
+      - name: Run unit tests
         run: ./gradlew test
 
       - name: Generate test report
@@ -40,11 +40,42 @@ jobs:
     runs-on: ubuntu-latest
     name: Deploy to EC2
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Deploy on push to any of these branches (not just main)
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/develop' ||
+        github.ref == 'refs/heads/staging' ||
+        github.ref == 'refs/heads/production'
+      )
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          # Set environment based on branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "environment=development" >> $GITHUB_OUTPUT
+            echo "db_name=auth-profile-dev" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "db_name=auth-profile-staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
+          else
+            echo "environment=development" >> $GITHUB_OUTPUT
+            echo "db_name=auth-profile-dev" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "🌍 Deploying to environment: ${{ steps.env.outputs.environment }}"
+          echo "🗄️  Database name: ${{ steps.env.outputs.db_name }}"
 
       - name: Create deployment package
         run: |
@@ -61,6 +92,12 @@ jobs:
             --exclude='*.log' \
             --exclude='*.tar.gz' \
             --exclude='deployment'
+          
+          # Add deployment info
+          echo "BRANCH=${{ github.ref_name }}" >> deployment/.deploy-info
+          echo "COMMIT=${{ github.sha }}" >> deployment/.deploy-info
+          echo "ENVIRONMENT=${{ steps.env.outputs.environment }}" >> deployment/.deploy-info
+          echo "DEPLOYED_AT=$(date -u)" >> deployment/.deploy-info
           
           # Create tarball
           cd deployment
@@ -85,11 +122,20 @@ jobs:
             # Navigate to home directory
             cd /home/ec2-user
             
+            # Set environment variables
+            BRANCH="${{ github.ref_name }}"
+            ENVIRONMENT="${{ steps.env.outputs.environment }}"
+            DB_NAME="${{ steps.env.outputs.db_name }}"
+            
+            echo "🚀 Deploying branch: $BRANCH"
+            echo "🌍 Environment: $ENVIRONMENT"
+            echo "🗄️  Database: $DB_NAME"
+            
             # Backup current deployment (if exists)
             if [ -d "auth-profile" ]; then
               echo "🔄 Backing up current deployment..."
-              sudo rm -rf auth-profile-backup
-              mv auth-profile auth-profile-backup
+              sudo rm -rf "auth-profile-backup-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+              mv auth-profile "auth-profile-backup-$(date +%Y%m%d-%H%M%S)"
             fi
             
             # Extract new deployment
@@ -99,19 +145,24 @@ jobs:
             tar -xzf ../pandacare-deployment.tar.gz
             
             # Create production environment file
-            echo "⚙️  Setting up production environment..."
+            echo "⚙️  Setting up $ENVIRONMENT environment..."
             cat > .env << EOF
+            # Deployment Info
+            BRANCH=$BRANCH
+            ENVIRONMENT=$ENVIRONMENT
+            DEPLOYED_AT=$(date -u)
+            
             # Database Configuration
-            POSTGRES_DB=auth-profile-prod
+            POSTGRES_DB=$DB_NAME
             POSTGRES_USER=pandacare_user
-            POSTGRES_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth-profile-prod
+            POSTGRES_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
+            DATASOURCE_URL=jdbc:postgresql://postgres:5432/$DB_NAME
             DATASOURCE_USERNAME=pandacare_user
-            DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DATASOURCE_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
             
             # JWT Configuration
             JWT_SECRET=${{ secrets.JWT_SECRET }}
-            JWT_EXPIRATION_MS=86400000
+            JWT_EXPIRATION_MS=${{ secrets.JWT_EXPIRATION_MS }}
             
             # Application Configuration
             SERVER_PORT=8081
@@ -120,21 +171,21 @@ jobs:
             # Service Integration
             RATING_URL=http://localhost:8083
             
-            # Logging Configuration
-            LOGGING_LEVEL_ROOT=INFO
-            LOGGING_LEVEL_AUTH_PROFILE=INFO
+            # Logging Configuration - Adjust based on environment
+            LOGGING_LEVEL_ROOT=\$([ "\$ENVIRONMENT" = "production" ] && echo "WARN" || echo "INFO")
+            LOGGING_LEVEL_AUTH_PROFILE=\$([ "\$ENVIRONMENT" = "production" ] && echo "INFO" || echo "DEBUG")
             LOGGING_FILE_NAME=/app/logs/auth-profile.log
             
             # Monitoring Configuration
             MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics
-            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=\$([ "\$ENVIRONMENT" = "production" ] && echo "never" || echo "when_authorized")
             MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
             
-            # Performance Configuration
-            SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=5
-            SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=20
-            CONTAINER_MEMORY_LIMIT=1G
-            CONTAINER_CPU_LIMIT=0.5
+            # Performance Configuration - Adjust based on environment
+            SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=\$([ "\$ENVIRONMENT" = "production" ] && echo "10" || echo "5")
+            SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=\$([ "\$ENVIRONMENT" = "production" ] && echo "50" || echo "20")
+            CONTAINER_MEMORY_LIMIT=\$([ "\$ENVIRONMENT" = "production" ] && echo "2G" || echo "1G")
+            CONTAINER_CPU_LIMIT=\$([ "\$ENVIRONMENT" = "production" ] && echo "1.0" || echo "0.5")
             EOF
             
             # Create logs directory
@@ -149,7 +200,7 @@ jobs:
             docker system prune -f || true
             
             # Build and start services
-            echo "🚀 Starting services..."
+            echo "🚀 Starting services for $ENVIRONMENT environment..."
             docker-compose up --build -d
             
             # Wait for application to start
@@ -183,15 +234,25 @@ jobs:
             echo "📊 Deployment Status:"
             docker-compose ps
             
+            # Show deployment info
+            echo "📋 Deployment Information:"
+            cat .deploy-info 2>/dev/null || echo "No deployment info available"
+            
             echo "🎉 Deployment completed successfully!"
+            echo "🌍 Environment: $ENVIRONMENT"
+            echo "🌿 Branch: $BRANCH"
 
       - name: Notify deployment status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
             echo "✅ Deployment to EC2 completed successfully!"
+            echo "🌿 Branch: ${{ github.ref_name }}"
+            echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
+            echo "🗄️  Database: ${{ steps.env.outputs.db_name }}"
           else
             echo "❌ Deployment to EC2 failed!"
+            echo "🌿 Branch: ${{ github.ref_name }}"
           fi
 
   cleanup:
