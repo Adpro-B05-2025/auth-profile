@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d # Make sure this path is correct relative to docker-compose.yml
+      - ./database/init:/docker-entrypoint-initdb.d
     networks:
       - pandacare-network
     restart: unless-stopped
@@ -28,40 +28,31 @@ services:
   auth-profile:
     build:
       context: .
-      dockerfile: Dockerfile  # This should be your runtime Dockerfile
+      dockerfile: Dockerfile
       args:
-        # This 'APP_JAR' key must match the 'ARG APP_JAR' instruction in your Dockerfile
         - APP_JAR=auth-profile.jar
-        # You could also use the map syntax:
-        # APP_JAR: auth-profile.jar
     container_name: pandacare-auth-profile
     environment:
       # Database Configuration
       - DATASOURCE_URL=${DATASOURCE_URL}
       - DATASOURCE_USERNAME=${DATASOURCE_USERNAME}
       - DATASOURCE_PASSWORD=${DATASOURCE_PASSWORD}
-
       # JWT Configuration
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION_MS=${JWT_EXPIRATION_MS}
-
       # Application Configuration
       - SERVER_PORT=${SERVER_PORT}
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}
-
       # Rating Service Integration
       - RATING_URL=${RATING_URL}
-
       # Logging Configuration
       - LOGGING_LEVEL_ROOT=${LOGGING_LEVEL_ROOT:-INFO}
       - LOGGING_LEVEL_AUTH_PROFILE=${LOGGING_LEVEL_AUTH_PROFILE:-DEBUG}
       - LOGGING_FILE_NAME=${LOGGING_FILE_NAME:-/app/logs/auth-profile.log}
-
       # Monitoring Configuration
       - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:-health,prometheus,metrics,info}
       - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:-when_authorized}
       - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=${MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED:-true}
-
       # Performance Configuration
       - SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:-10}
       - SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:-50}
@@ -72,11 +63,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # You had two volume mounts for logs. Keeping the host bind mount for easier access.
-      # If you also intended to use the named volume 'app_logs', ensure it's defined below
-      # and uncomment if needed. For now, only ./logs is active for the app.
-      # - app_logs:/app/logs
-      - ./logs:/app/logs  # Mount host directory for easy log access
+      - ./logs:/app/logs
     networks:
       - pandacare-network
     restart: unless-stopped
@@ -86,8 +73,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s  # Give more time for Spring Boot to start
-    deploy: # This section is primarily for Docker Swarm. It might be ignored by standalone docker-compose up.
+      start_period: 120s
+    deploy:
       resources:
         limits:
           memory: ${CONTAINER_MEMORY_LIMIT:-2G}
@@ -96,13 +83,147 @@ services:
           memory: ${CONTAINER_MEMORY_RESERVATION:-1G}
           cpus: ${CONTAINER_CPU_RESERVATION:-0.5}
 
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pandacare-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - pandacare-network
+    restart: unless-stopped
+    depends_on:
+      auth-profile:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Grafana - Visualization Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pandacare-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
+      - GF_SERVER_ROOT_URL=http://${GRAFANA_DOMAIN:-localhost}:3000
+    networks:
+      - pandacare-network
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    env_file: .env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # cAdvisor - Container Metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: pandacare-cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    networks:
+      - pandacare-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node Exporter - System Metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: pandacare-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
+    restart: unless-stopped
+    networks:
+      - pandacare-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Postgres Exporter - Database Metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: pandacare-postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+    networks:
+      - pandacare-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
-  postgres_data: # Defines the named volume for PostgreSQL data persistence
+  postgres_data:
     driver: local
-  app_logs: # Defines the named volume 'app_logs'. It's currently not used by auth-profile above.
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:
   pandacare-network:
     driver: bridge
-    name: pandacare-network # Explicitly naming the network
+    name: pandacare-network

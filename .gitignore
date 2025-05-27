@@ -37,6 +37,5 @@ out/
 .vscode/
 
 # Environment variables and sensitive configurations
-.env
+.env**
 application-dev.properties
-monitoring/grafana-agent.yml

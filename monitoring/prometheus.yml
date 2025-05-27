@@ -1,6 +1,10 @@
+# monitoring/prometheus.yml
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: '${CLUSTER:-pandacare-local}'
+    environment: '${ENVIRONMENT:-development}'
 
 rule_files:
   - "alert_rules.yml"
@@ -8,17 +12,16 @@ rule_files:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: []
+        - targets: [] # No alertmanager configured
 
 scrape_configs:
   # Spring Boot Application
   - job_name: 'pandacare-auth-profile'
     metrics_path: '/actuator/prometheus'
     scrape_interval: 5s
-    static_configs:
-      - targets: ['host.docker.internal:8081']  # For Docker Desktop
-        # - targets: ['172.17.0.1:8081']        # For Linux Docker
     scrape_timeout: 4s
+    static_configs:
+      - targets: ['auth-profile:8081']
 
   # Prometheus itself
   - job_name: 'prometheus'
@@ -35,14 +38,8 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  # PostgreSQL Exporter (if you want to monitor your database)
+  # PostgreSQL Exporter
   - job_name: 'postgres-exporter'
     static_configs:
       - targets: ['postgres-exporter:9187']
     scrape_interval: 30s
-
-
-
-# Remote write configuration (optional - for long-term storage)
-# remote_write:
-#   - url: "http://your-remote-storage:port/api/v1/write"
