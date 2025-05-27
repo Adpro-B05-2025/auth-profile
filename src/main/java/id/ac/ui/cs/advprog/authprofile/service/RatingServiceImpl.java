@@ -187,30 +187,48 @@ public class RatingServiceImpl implements IRatingService {
         try {
             List<CareGiver> allCaregivers = careGiverRepository.findAll();
             int totalCaregivers = allCaregivers.size();
-            int successCount = 0;
-            int failureCount = 0;
 
-            for (CareGiver caregiver : allCaregivers) {
-                try {
-                    updateCaregiverRatingCache(caregiver.getId());
-                    successCount++;
-                } catch (Exception e) {
-                    failureCount++;
-                    logger.warn("Failed to update cache for caregiver {}: {}", caregiver.getId(), e.getMessage());
-                }
-            }
+            BulkUpdateResult result = processBulkCacheUpdate(allCaregivers);
 
             logger.info("Bulk update completed: {} total, {} successful, {} failed",
-                    totalCaregivers, successCount, failureCount);
+                    totalCaregivers, result.successCount(), result.failureCount());
 
             // Record bulk update metrics
             monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_total").increment(totalCaregivers);
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_successful").increment(successCount);
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_failed").increment(failureCount);
+            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_successful").increment(result.successCount());
+            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_failed").increment(result.failureCount());
 
         } catch (Exception e) {
             logger.error("Failed to perform bulk rating cache update", e);
             monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_errors").increment();
         }
     }
+
+    /**
+     * Processes the bulk cache update for all caregivers
+     *
+     * @param caregivers List of caregivers to update
+     * @return BulkUpdateResult containing success and failure counts
+     */
+    private BulkUpdateResult processBulkCacheUpdate(List<CareGiver> caregivers) {
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (CareGiver caregiver : caregivers) {
+            try {
+                updateCaregiverRatingCache(caregiver.getId());
+                successCount++;
+            } catch (Exception e) {
+                failureCount++;
+                logger.warn("Failed to update cache for caregiver {}: {}", caregiver.getId(), e.getMessage());
+            }
+        }
+
+        return new BulkUpdateResult(successCount, failureCount);
+    }
+
+    /**
+     * Record to hold bulk update results
+     */
+    private record BulkUpdateResult(int successCount, int failureCount) {}
 }

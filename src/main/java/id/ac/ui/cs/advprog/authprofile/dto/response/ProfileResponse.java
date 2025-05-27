@@ -43,12 +43,11 @@ public class ProfileResponse {
                 .map(role -> role.getName().name())
                 .collect(Collectors.toList()));
 
-        if (user instanceof Pacillian) {
+        if (user instanceof Pacillian pacillian) {
             response.setUserType("PACILLIAN");
-            response.setMedicalHistory(((Pacillian) user).getMedicalHistory());
-        } else if (user instanceof CareGiver) {
+            response.setMedicalHistory(pacillian.getMedicalHistory());
+        } else if (user instanceof CareGiver careGiver) {
             response.setUserType("CAREGIVER");
-            CareGiver careGiver = (CareGiver) user;
             response.setSpeciality(careGiver.getSpeciality());
             response.setWorkAddress(careGiver.getWorkAddress());
             response.setAverageRating(careGiver.getAverageRating());
