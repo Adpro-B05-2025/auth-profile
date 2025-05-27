@@ -189,22 +189,22 @@ public class AuthServiceImpl implements IAuthService {
             // Use the factory to create the user entity
             User user = factory.createUser(registerRequest, encoder.encode(registerRequest.getPassword()));
 
-            String resultMessage;
-
-            // Save the user to the appropriate repository
-            if (user instanceof Pacillian pacillian) {
-                pacillianRepository.save(pacillian);
-                resultMessage = "Pacillian registered successfully!";
-                userType = "pacillian";
-                logger.info("Pacillian registration successful for email: {}", registerRequest.getEmail());
-            } else if (user instanceof CareGiver careGiver) {
-                careGiverRepository.save(careGiver);
-                resultMessage = "CareGiver registered successfully!";
-                userType = "caregiver";
-                logger.info("CareGiver registration successful for email: {}", registerRequest.getEmail());
-            } else {
-                throw new IllegalArgumentException("Unsupported user type");
-            }
+            // Save the user to the appropriate repository using switch expression
+            String resultMessage = switch (user) {
+                case Pacillian pacillian -> {
+                    pacillianRepository.save(pacillian);
+                    userType = "pacillian";
+                    logger.info("Pacillian registration successful for email: {}", registerRequest.getEmail());
+                    yield "Pacillian registered successfully!";
+                }
+                case CareGiver careGiver -> {
+                    careGiverRepository.save(careGiver);
+                    userType = "caregiver";
+                    logger.info("CareGiver registration successful for email: {}", registerRequest.getEmail());
+                    yield "CareGiver registered successfully!";
+                }
+                default -> throw new IllegalArgumentException("Unsupported user type: " + user.getClass().getSimpleName());
+            };
 
             // Record successful registration
             monitoringConfig.meterRegistry.counter("auth_registration_successful",
