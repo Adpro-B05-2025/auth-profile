@@ -1,5 +1,6 @@
-package id.ac.ui.cs.advprog.authprofile.dto.response;
+package id.ac.ui.cs.advprog.authprofile.dto;
 
+import id.ac.ui.cs.advprog.authprofile.dto.response.TokenValidationResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;

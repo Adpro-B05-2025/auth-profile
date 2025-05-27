@@ -1,8 +1,9 @@
-package id.ac.ui.cs.advprog.authprofile.security.services;
+package id.ac.ui.cs.advprog.authprofile.security.service;
 
 import id.ac.ui.cs.advprog.authprofile.model.Role;
 import id.ac.ui.cs.advprog.authprofile.model.User;
 import id.ac.ui.cs.advprog.authprofile.repository.UserRepository;
+import id.ac.ui.cs.advprog.authprofile.security.services.UserDetailsServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

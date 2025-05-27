@@ -97,7 +97,7 @@ public class AuthorizationAspect {
                 Object result = expression.getValue(context);
 
                 if (result != null) {
-                    resourceId = result instanceof Long ? (Long) result : Long.valueOf(result.toString());
+                    resourceId = result instanceof Long longValue ? longValue : Long.valueOf(result.toString());
                 }
             } catch (EvaluationException | NumberFormatException ex) {
                 logger.debug("Could not evaluate resource ID expression: {}", ex.getMessage());

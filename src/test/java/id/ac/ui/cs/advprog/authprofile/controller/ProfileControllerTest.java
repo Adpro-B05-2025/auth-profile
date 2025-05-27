@@ -147,7 +147,6 @@ class ProfileControllerTest {
     @WithMockUser(roles = "PACILLIAN")
     void updateCurrentUserProfile() throws Exception {
         // Create the request object
-        UpdateProfileRequest updateProfileRequest = new UpdateProfileRequest();
         updateProfileRequest.setName("Updated Name");
         updateProfileRequest.setEmail("test@example.com");
         updateProfileRequest.setAddress("Updated Address");
@@ -388,7 +387,6 @@ class ProfileControllerTest {
     @WithMockUser(roles = "PACILLIAN")
     void updateCurrentUserProfile_WithEmailChange_AllBranches() throws Exception {
         // Create the request object with email change
-        UpdateProfileRequest updateProfileRequest = new UpdateProfileRequest();
         updateProfileRequest.setName("Updated Name");
         updateProfileRequest.setEmail("new-email@example.com"); // Changed email
         updateProfileRequest.setAddress("Updated Address");

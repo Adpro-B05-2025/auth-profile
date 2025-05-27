@@ -29,12 +29,15 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class ProfileServiceImpl implements IProfileService {
 
     private static final Logger logger = LoggerFactory.getLogger(ProfileServiceImpl.class);
+    private static final String USER_TYPE_TAG = "userType";
+    private static final String EMAIL_CHANGED_TAG = "emailChanged";
+    private static final String REASON_TAG = "reason";
+    private static final String USER_NOT_FOUND_MESSAGE = "User not found";
 
     private final UserRepository userRepository;
     private final PacillianRepository pacillianRepository;
@@ -72,7 +75,7 @@ public class ProfileServiceImpl implements IProfileService {
         // Get the current user by ID instead of by email
         Long userId = Long.parseLong(userDetails.getUsername());
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                .orElseThrow(() -> new EntityNotFoundException(USER_NOT_FOUND_MESSAGE));
 
         logger.debug("Retrieved profile for user: {}", user.getEmail());
         return ProfileResponse.fromUser(user);
@@ -89,13 +92,12 @@ public class ProfileServiceImpl implements IProfileService {
         ProfileResponse profile = ProfileResponse.fromUser(user);
 
         // Enhanced rating integration for caregivers
-        if (user instanceof CareGiver) {
+        if (user instanceof CareGiver caregiver) {
             try {
                 RatingSummaryResponse ratingSummary = ratingService.getRatingSummary(userId);
                 profile.setAverageRating(ratingSummary.getAverageRating());
 
                 // Also update the caregiver entity if ratings have changed significantly
-                CareGiver caregiver = (CareGiver) user;
                 if (Math.abs(caregiver.getAverageRating() - ratingSummary.getAverageRating()) > 0.1) {
                     // Async update to avoid blocking the request
                     ratingService.updateCaregiverRatingCache(userId);
@@ -103,7 +105,7 @@ public class ProfileServiceImpl implements IProfileService {
             } catch (Exception e) {
                 logger.warn("Failed to get rating summary for caregiver {}: {}", userId, e.getMessage());
                 // Fall back to cached rating from database
-                profile.setAverageRating(((CareGiver) user).getAverageRating());
+                profile.setAverageRating(caregiver.getAverageRating());
             }
         }
 
@@ -118,7 +120,7 @@ public class ProfileServiceImpl implements IProfileService {
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
                 .map(this::enhanceProfileWithRating)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -154,7 +156,7 @@ public class ProfileServiceImpl implements IProfileService {
 
         return careGivers.stream()
                 .map(ProfileResponse::fromUser)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Transactional
@@ -176,74 +178,33 @@ public class ProfileServiceImpl implements IProfileService {
 
             // Find the user by ID
             User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                    .orElseThrow(() -> new EntityNotFoundException(USER_NOT_FOUND_MESSAGE));
 
             userType = user instanceof Pacillian ? "pacillian" : "caregiver";
-            String currentEmail = user.getEmail();
 
-            // Check if email is being changed
-            if (!currentEmail.equals(updateRequest.getEmail())) {
-                // Check if new email is already in use by another user
-                if (userRepository.existsByEmail(updateRequest.getEmail())) {
-                    throw new EmailAlreadyExistsException("Email is already in use");
-                }
-                user.setEmail(updateRequest.getEmail());
-                emailChanged = true;
-                logger.info("Email changed for user {} from {} to {}", userId, currentEmail, updateRequest.getEmail());
-            }
+            // Handle email change if needed
+            emailChanged = handleEmailChange(user, updateRequest, userId);
 
-            user.setName(updateRequest.getName());
-            user.setAddress(updateRequest.getAddress());
-            user.setPhoneNumber(updateRequest.getPhoneNumber());
+            // Update basic user information
+            updateBasicUserInfo(user, updateRequest);
 
-            // Save the user first
-            if (user instanceof Pacillian pacillian) {
-                pacillian.setMedicalHistory(updateRequest.getMedicalHistory());
-                pacillianRepository.save(pacillian);
-            } else if (user instanceof CareGiver careGiver) {
-                careGiver.setSpeciality(updateRequest.getSpeciality());
-                careGiver.setWorkAddress(updateRequest.getWorkAddress());
-                careGiverRepository.save(careGiver);
-            } else {
-                userRepository.save(user);
-            }
+            // Save the user to appropriate repository
+            saveUserByType(user, updateRequest);
 
-            // Force a flush to ensure changes are written to the database
-            if (user instanceof Pacillian) {
-                pacillianRepository.flush();
-            } else if (user instanceof CareGiver) {
-                careGiverRepository.flush();
-            } else {
-                userRepository.flush();
-            }
+            // Force flush to ensure changes are written
+            flushUserByType(user);
 
-            // If email was changed, generate new JWT token
+            // Handle JWT token regeneration if email changed
             if (emailChanged) {
-                // Re-fetch the user to ensure we have the latest data
-                user = userRepository.findById(userId)
-                        .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
-
-                // Generate a new token using the user ID (remains the same)
-                String jwt = jwtUtils.generateJwtTokenFromUserId(userId.toString());
-
-                // Get the current HTTP response to add the new token as a header
-                ServletRequestAttributes requestAttributes =
-                        (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (requestAttributes != null) {
-                    HttpServletResponse httpResponse = requestAttributes.getResponse();
-                    if (httpResponse != null) {
-                        httpResponse.setHeader("Authorization", "Bearer " + jwt);
-                        httpResponse.setHeader("X-Email-Changed", "true");
-                    }
-                }
+                generateNewJwtTokenForEmailChange(userId);
             }
 
             logger.info("Profile update successful for user: {}", user.getEmail());
 
             // Record successful update
             monitoringConfig.meterRegistry.counter("profile_update_successful",
-                    "userType", userType,
-                    "emailChanged", String.valueOf(emailChanged)
+                    USER_TYPE_TAG, userType,
+                    EMAIL_CHANGED_TAG, String.valueOf(emailChanged)
             ).increment();
 
             return ProfileResponse.fromUser(user);
@@ -251,17 +212,97 @@ public class ProfileServiceImpl implements IProfileService {
         } catch (Exception e) {
             // Record failed update
             monitoringConfig.meterRegistry.counter("profile_update_failed",
-                    "userType", userType,
-                    "reason", e.getClass().getSimpleName()
+                    USER_TYPE_TAG, userType,
+                    REASON_TAG, e.getClass().getSimpleName()
             ).increment();
 
             logger.error("Profile update failed: {}", e.getMessage());
             throw e;
         } finally {
             sample.stop(monitoringConfig.meterRegistry.timer("profile_update_duration",
-                    "userType", userType,
-                    "emailChanged", String.valueOf(emailChanged)
+                    USER_TYPE_TAG, userType,
+                    EMAIL_CHANGED_TAG, String.valueOf(emailChanged)
             ));
+        }
+    }
+
+    /**
+     * Handles email change validation and update
+     */
+    private boolean handleEmailChange(User user, UpdateProfileRequest updateRequest, Long userId) {
+        String currentEmail = user.getEmail();
+
+        // Check if email is being changed
+        if (!currentEmail.equals(updateRequest.getEmail())) {
+            // Check if new email is already in use by another user
+            if (userRepository.existsByEmail(updateRequest.getEmail())) {
+                throw new EmailAlreadyExistsException("Email is already in use");
+            }
+            user.setEmail(updateRequest.getEmail());
+            logger.info("Email changed for user {} from {} to {}", userId, currentEmail, updateRequest.getEmail());
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Updates basic user information
+     */
+    private void updateBasicUserInfo(User user, UpdateProfileRequest updateRequest) {
+        user.setName(updateRequest.getName());
+        user.setAddress(updateRequest.getAddress());
+        user.setPhoneNumber(updateRequest.getPhoneNumber());
+    }
+
+    /**
+     * Saves user to appropriate repository based on type
+     */
+    private void saveUserByType(User user, UpdateProfileRequest updateRequest) {
+        switch (user) {
+            case Pacillian pacillian -> {
+                pacillian.setMedicalHistory(updateRequest.getMedicalHistory());
+                pacillianRepository.save(pacillian);
+            }
+            case CareGiver careGiver -> {
+                careGiver.setSpeciality(updateRequest.getSpeciality());
+                careGiver.setWorkAddress(updateRequest.getWorkAddress());
+                careGiverRepository.save(careGiver);
+            }
+            default -> userRepository.save(user);
+        }
+    }
+
+    /**
+     * Flushes appropriate repository based on user type
+     */
+    private void flushUserByType(User user) {
+        switch (user) {
+            case Pacillian ignored -> pacillianRepository.flush();
+            case CareGiver ignored -> careGiverRepository.flush();
+            default -> userRepository.flush();
+        }
+    }
+
+    /**
+     * Generates new JWT token when email is changed
+     */
+    private void generateNewJwtTokenForEmailChange(Long userId) {
+        // Re-fetch the user to ensure we have the latest data
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
+
+        // Generate a new token using the user ID (remains the same)
+        String jwt = jwtUtils.generateJwtTokenFromUserId(userId.toString());
+
+        // Get the current HTTP response to add the new token as a header
+        ServletRequestAttributes requestAttributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (requestAttributes != null) {
+            HttpServletResponse httpResponse = requestAttributes.getResponse();
+            if (httpResponse != null) {
+                httpResponse.setHeader("Authorization", "Bearer " + jwt);
+                httpResponse.setHeader("X-Email-Changed", "true");
+            }
         }
     }
 
@@ -281,7 +322,7 @@ public class ProfileServiceImpl implements IProfileService {
 
             // Find user by ID
             User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                    .orElseThrow(() -> new EntityNotFoundException(USER_NOT_FOUND_MESSAGE));
 
             userType = user instanceof Pacillian ? "pacillian" : "caregiver";
             String userEmail = user.getEmail();
@@ -293,22 +334,22 @@ public class ProfileServiceImpl implements IProfileService {
 
             // Record successful deletion
             monitoringConfig.meterRegistry.counter("profile_delete_successful",
-                    "userType", userType).increment();
+                    USER_TYPE_TAG, userType).increment();
 
             logger.info("Account deletion successful for user: {}", userEmail);
 
         } catch (Exception e) {
             // Record failed deletion
             monitoringConfig.meterRegistry.counter("profile_delete_failed",
-                    "userType", userType,
-                    "reason", e.getClass().getSimpleName()
+                    USER_TYPE_TAG, userType,
+                    REASON_TAG, e.getClass().getSimpleName()
             ).increment();
 
             logger.error("Account deletion failed: {}", e.getMessage());
             throw e;
         } finally {
             sample.stop(monitoringConfig.meterRegistry.timer("profile_delete_duration",
-                    "userType", userType));
+                    USER_TYPE_TAG, userType));
         }
     }
 
@@ -320,7 +361,7 @@ public class ProfileServiceImpl implements IProfileService {
         List<CareGiver> careGivers = careGiverRepository.findAll();
         return careGivers.stream()
                 .map(this::createLiteProfileResponseWithRating)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -345,27 +386,7 @@ public class ProfileServiceImpl implements IProfileService {
 
         return careGivers.stream()
                 .map(this::createLiteProfileResponseWithRating)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Creates a lite version of ProfileResponse with only essential information
-     */
-    private ProfileResponse createLiteProfileResponse(CareGiver careGiver) {
-        ProfileResponse response = new ProfileResponse();
-        response.setId(careGiver.getId());
-        response.setEmail(careGiver.getEmail());
-        response.setName(careGiver.getName());
-        // Set NIK and address to null for security
-        response.setNik(null);
-        response.setAddress(null);
-        response.setPhoneNumber(careGiver.getPhoneNumber());
-        response.setUserType("CAREGIVER");
-        response.setSpeciality(careGiver.getSpeciality());
-        response.setWorkAddress(careGiver.getWorkAddress());
-        response.setAverageRating(careGiver.getAverageRating());
-
-        return response;
+                .toList();
     }
 
     @Override
@@ -386,15 +407,6 @@ public class ProfileServiceImpl implements IProfileService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
         return user.getName();
-    }
-
-    private double calculateAverageRating(Long doctorId) {
-        List<RatingResponseDto> ratings = ratingClientService.getRatingsByDoctorId(doctorId);
-        if (ratings.isEmpty()) {
-            return 0.0;
-        }
-        double sum = ratings.stream().mapToInt(RatingResponseDto::getScore).sum();
-        return sum / ratings.size();
     }
 
     @Override
@@ -476,6 +488,4 @@ public class ProfileServiceImpl implements IProfileService {
 
         return response;
     }
-
-
 }
