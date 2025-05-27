@@ -52,10 +52,6 @@ public class PacillianAuthorizationStrategy extends BaseAuthorizationStrategy {
      * Pacillians can view their own profile or any caregiver profile
      */
     private boolean canViewProfile(User user, Long resourceId) {
-        if (user.getId().equals(resourceId)) {
-            return true; // Own profile
-        } else {
-            return false;
-        }
+        return user.getId().equals(resourceId);
     }
 }
