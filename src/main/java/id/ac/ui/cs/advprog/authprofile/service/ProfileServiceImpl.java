@@ -288,7 +288,7 @@ public class ProfileServiceImpl implements IProfileService {
      */
     private void generateNewJwtTokenForEmailChange(Long userId) {
         // Re-fetch the user to ensure we have the latest data
-        User user = userRepository.findById(userId)
+        userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found after update"));
 
         // Generate a new token using the user ID (remains the same)
