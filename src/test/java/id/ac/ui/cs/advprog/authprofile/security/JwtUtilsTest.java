@@ -100,9 +100,6 @@ public class JwtUtilsTest {
         when(userDetails.getUsername()).thenReturn(userId); // Now using user ID
         String token = shortExpirationJwtUtils.generateJwtToken(authentication);
 
-        // Wait for token to expire
-        Thread.sleep(10);
-
         // Act
         boolean isValid = shortExpirationJwtUtils.validateJwtToken(token);
 
@@ -154,8 +151,6 @@ public class JwtUtilsTest {
 
     @Test
     public void testGenerateJwtTokenFromUserId() {
-        // Arrange - Note method name change
-        String userId = "123"; // Using user ID instead of email
 
         // Act
         String token = jwtUtils.generateJwtTokenFromUserId(userId); // Method name updated

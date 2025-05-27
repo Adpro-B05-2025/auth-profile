@@ -16,12 +16,16 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 @Service
 public class SearchCareGiverService {
 
     private static final Logger logger = LoggerFactory.getLogger(SearchCareGiverService.class);
+    private static final String SEARCH_REQUESTS_TOTAL_METRIC = "search_requests_total";
+    private static final String SEARCH_CAREGIVERS_RESULTS_TOTAL_METRIC = "search_caregivers_results_total";
+    private static final String PAGINATED_TYPE = "paginated";
+    private static final String AVERAGE_RATING_FIELD = "averageRating";
+
     private final CareGiverRepository careGiverRepository;
     private final MonitoringConfig monitoringConfig;
 
@@ -41,7 +45,7 @@ public class SearchCareGiverService {
         logger.debug("Starting async search - name: {}, speciality: {}", name, speciality);
 
         // Use the registered search requests counter with proper tags
-        monitoringConfig.meterRegistry.counter("search_requests_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_REQUESTS_TOTAL_METRIC,
                 Tags.of(
                         "type", "optimized",
                         "hasName", String.valueOf(name != null && !name.trim().isEmpty()),
@@ -55,12 +59,12 @@ public class SearchCareGiverService {
 
         List<ProfileResponse> results = careGivers.stream()
                 .map(this::createLiteProfileResponse)
-                .collect(Collectors.toList());
+                .toList();
 
         logger.debug("Async search completed with {} results", results.size());
 
         // Record search result count using the registered counter
-        monitoringConfig.meterRegistry.counter("search_caregivers_results_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_CAREGIVERS_RESULTS_TOTAL_METRIC,
                 Tags.of("type", "optimized")).increment(results.size());
 
         return CompletableFuture.completedFuture(results);
@@ -74,9 +78,9 @@ public class SearchCareGiverService {
         logger.debug("Starting async paginated search");
 
         // Use the registered search requests counter
-        monitoringConfig.meterRegistry.counter("search_requests_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_REQUESTS_TOTAL_METRIC,
                 Tags.of(
-                        "type", "paginated",
+                        "type", PAGINATED_TYPE,
                         "hasName", String.valueOf(name != null && !name.trim().isEmpty()),
                         "hasSpeciality", String.valueOf(speciality != null && !speciality.trim().isEmpty())
                 )).increment();
@@ -86,7 +90,7 @@ public class SearchCareGiverService {
         int validSize = (size <= 0 || size > 100) ? 10 : size;
 
         Pageable pageable = PageRequest.of(validPage, validSize,
-                Sort.by(Sort.Direction.DESC, "averageRating")
+                Sort.by(Sort.Direction.DESC, AVERAGE_RATING_FIELD)
                         .and(Sort.by(Sort.Direction.ASC, "name")));
 
         String cleanName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
@@ -109,11 +113,11 @@ public class SearchCareGiverService {
         logger.debug("Async paginated search completed - {} total elements", results.getTotalElements());
 
         // Record pagination metrics
-        monitoringConfig.meterRegistry.counter("search_caregivers_results_total",
-                Tags.of("type", "paginated")).increment(results.getNumberOfElements());
+        monitoringConfig.meterRegistry.counter(SEARCH_CAREGIVERS_RESULTS_TOTAL_METRIC,
+                Tags.of("type", PAGINATED_TYPE)).increment(results.getNumberOfElements());
 
         monitoringConfig.meterRegistry.gauge("search_caregivers_total_elements",
-                Tags.of("type", "paginated"), results.getTotalElements());
+                Tags.of("type", PAGINATED_TYPE), results.getTotalElements());
 
         return CompletableFuture.completedFuture(results);
     }
@@ -179,57 +183,98 @@ public class SearchCareGiverService {
 
         logger.debug("Starting async advanced search with sorting");
 
-        // Use the registered search requests counter
-        monitoringConfig.meterRegistry.counter("search_requests_total",
-                Tags.of(
-                        "type", "advanced",
-                        "sortBy", sortBy != null ? sortBy : "default",
-                        "sortDirection", sortDirection != null ? sortDirection : "default"
-                )).increment();
+        // Record search request metrics
+        recordAdvancedSearchMetrics(sortBy, sortDirection);
 
-        // Parameter validation and processing
-        int validPage = Math.max(0, page);
-        int validSize = (size <= 0 || size > 100) ? 10 : size;
+        // Validate and process parameters
+        SearchParameters params = validateAndProcessParameters(page, size, sortBy, sortDirection);
 
-        Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
-        String[] allowedSortFields = {"name", "speciality", "averageRating", "ratingCount"};
-        String validSortBy = "averageRating";
+        // Create pageable with validated parameters
+        Pageable pageable = PageRequest.of(params.validPage(), params.validSize(),
+                Sort.by(params.direction(), params.validSortBy()));
 
-        if (sortBy != null) {
-            for (String field : allowedSortFields) {
-                if (field.equalsIgnoreCase(sortBy)) {
-                    validSortBy = field;
-                    break;
-                }
-            }
-        }
+        // Clean input parameters
+        String cleanName = cleanString(name);
+        String cleanSpeciality = cleanString(speciality);
 
-        Pageable pageable = PageRequest.of(validPage, validSize, Sort.by(direction, validSortBy));
+        // Execute search based on parameters
+        Page<CareGiver> careGiversPage = executeAdvancedSearch(cleanName, cleanSpeciality, pageable);
 
-        String cleanName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
-        String cleanSpeciality = (speciality != null && !speciality.trim().isEmpty()) ? speciality.trim() : null;
-
-        Page<CareGiver> careGiversPage;
-        if (cleanName != null && cleanSpeciality != null) {
-            careGiversPage = careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
-                    cleanName, cleanSpeciality, pageable);
-        } else if (cleanName != null) {
-            careGiversPage = careGiverRepository.findByNameContainingIgnoreCase(cleanName, pageable);
-        } else if (cleanSpeciality != null) {
-            careGiversPage = careGiverRepository.findBySpecialityContainingIgnoreCase(cleanSpeciality, pageable);
-        } else {
-            careGiversPage = careGiverRepository.findAll(pageable);
-        }
-
+        // Map results and record metrics
         Page<ProfileResponse> results = careGiversPage.map(this::createLiteProfileResponse);
 
         logger.debug("Async advanced search completed");
 
         // Record advanced search metrics
-        monitoringConfig.meterRegistry.counter("search_caregivers_results_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_CAREGIVERS_RESULTS_TOTAL_METRIC,
                 Tags.of("type", "advanced")).increment(results.getNumberOfElements());
 
         return CompletableFuture.completedFuture(results);
+    }
+
+    /**
+     * Records metrics for advanced search requests
+     */
+    private void recordAdvancedSearchMetrics(String sortBy, String sortDirection) {
+        monitoringConfig.meterRegistry.counter(SEARCH_REQUESTS_TOTAL_METRIC,
+                Tags.of(
+                        "type", "advanced",
+                        "sortBy", sortBy != null ? sortBy : "default",
+                        "sortDirection", sortDirection != null ? sortDirection : "default"
+                )).increment();
+    }
+
+    /**
+     * Validates and processes search parameters
+     */
+    private SearchParameters validateAndProcessParameters(int page, int size, String sortBy, String sortDirection) {
+        int validPage = Math.max(0, page);
+        int validSize = (size <= 0 || size > 100) ? 10 : size;
+
+        Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        String validSortBy = validateSortField(sortBy);
+
+        return new SearchParameters(validPage, validSize, direction, validSortBy);
+    }
+
+    /**
+     * Validates sort field against allowed fields
+     */
+    private String validateSortField(String sortBy) {
+        if (sortBy == null) {
+            return AVERAGE_RATING_FIELD;
+        }
+
+        String[] allowedSortFields = {"name", "speciality", AVERAGE_RATING_FIELD, "ratingCount"};
+        for (String field : allowedSortFields) {
+            if (field.equalsIgnoreCase(sortBy)) {
+                return field;
+            }
+        }
+        return AVERAGE_RATING_FIELD;
+    }
+
+    /**
+     * Cleans string input parameters
+     */
+    private String cleanString(String input) {
+        return (input != null && !input.trim().isEmpty()) ? input.trim() : null;
+    }
+
+    /**
+     * Executes the advanced search based on cleaned parameters
+     */
+    private Page<CareGiver> executeAdvancedSearch(String cleanName, String cleanSpeciality, Pageable pageable) {
+        if (cleanName != null && cleanSpeciality != null) {
+            return careGiverRepository.findByNameContainingIgnoreCaseAndSpecialityContainingIgnoreCase(
+                    cleanName, cleanSpeciality, pageable);
+        } else if (cleanName != null) {
+            return careGiverRepository.findByNameContainingIgnoreCase(cleanName, pageable);
+        } else if (cleanSpeciality != null) {
+            return careGiverRepository.findBySpecialityContainingIgnoreCase(cleanSpeciality, pageable);
+        } else {
+            return careGiverRepository.findAll(pageable);
+        }
     }
 
     /**
@@ -241,7 +286,7 @@ public class SearchCareGiverService {
         logger.debug("Starting async top-rated caregivers search");
 
         // Use the registered search requests counter
-        monitoringConfig.meterRegistry.counter("search_requests_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_REQUESTS_TOTAL_METRIC,
                 Tags.of("type", "toprated")
         ).increment();
 
@@ -249,7 +294,7 @@ public class SearchCareGiverService {
         int validSize = (size <= 0 || size > 50) ? 10 : size;
 
         Pageable pageable = PageRequest.of(validPage, validSize,
-                Sort.by(Sort.Direction.DESC, "averageRating")
+                Sort.by(Sort.Direction.DESC, AVERAGE_RATING_FIELD)
                         .and(Sort.by(Sort.Direction.DESC, "ratingCount")));
 
         Page<CareGiver> careGiversPage = careGiverRepository.findAll(pageable);
@@ -258,7 +303,7 @@ public class SearchCareGiverService {
         logger.debug("Async top-rated search completed - {} total elements", results.getTotalElements());
 
         // Record top-rated search metrics
-        monitoringConfig.meterRegistry.counter("search_caregivers_results_total",
+        monitoringConfig.meterRegistry.counter(SEARCH_CAREGIVERS_RESULTS_TOTAL_METRIC,
                 Tags.of("type", "toprated")).increment(results.getNumberOfElements());
 
         return CompletableFuture.completedFuture(results);
@@ -281,4 +326,9 @@ public class SearchCareGiverService {
         response.setAverageRating(careGiver.getAverageRating());
         return response;
     }
+
+    /**
+     * Record to hold validated search parameters
+     */
+    private record SearchParameters(int validPage, int validSize, Sort.Direction direction, String validSortBy) {}
 }

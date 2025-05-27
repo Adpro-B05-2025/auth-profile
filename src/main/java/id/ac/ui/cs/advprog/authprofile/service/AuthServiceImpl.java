@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 public class AuthServiceImpl implements IAuthService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthServiceImpl.class);
+    private static final String USER_TYPE_TAG = "userType";
 
     private final UserRepository userRepository;
     private final PacillianRepository pacillianRepository;
@@ -191,13 +192,13 @@ public class AuthServiceImpl implements IAuthService {
             String resultMessage;
 
             // Save the user to the appropriate repository
-            if (user instanceof Pacillian) {
-                pacillianRepository.save((Pacillian) user);
+            if (user instanceof Pacillian pacillian) {
+                pacillianRepository.save(pacillian);
                 resultMessage = "Pacillian registered successfully!";
                 userType = "pacillian";
                 logger.info("Pacillian registration successful for email: {}", registerRequest.getEmail());
-            } else if (user instanceof CareGiver) {
-                careGiverRepository.save((CareGiver) user);
+            } else if (user instanceof CareGiver careGiver) {
+                careGiverRepository.save(careGiver);
                 resultMessage = "CareGiver registered successfully!";
                 userType = "caregiver";
                 logger.info("CareGiver registration successful for email: {}", registerRequest.getEmail());
@@ -207,20 +208,20 @@ public class AuthServiceImpl implements IAuthService {
 
             // Record successful registration
             monitoringConfig.meterRegistry.counter("auth_registration_successful",
-                    "userType", userType).increment();
+                    USER_TYPE_TAG, userType).increment();
 
             return resultMessage;
 
         } catch (Exception e) {
             // Record failed registration
             monitoringConfig.meterRegistry.counter("auth_registration_failed",
-                    "userType", userType, "reason", e.getClass().getSimpleName()).increment();
+                    USER_TYPE_TAG, userType, "reason", e.getClass().getSimpleName()).increment();
 
             logger.error("Registration failed for email: {} - {}", registerRequest.getEmail(), e.getMessage());
             throw e;
         } finally {
             sample.stop(monitoringConfig.meterRegistry.timer("auth_registration_duration",
-                    "userType", userType));
+                    USER_TYPE_TAG, userType));
         }
     }
 }
