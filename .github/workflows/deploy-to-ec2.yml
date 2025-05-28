@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, develop, staging, production ]
 
+env:
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+  IMAGE_NAME: pandacare-auth-profile
+
 jobs:
   build_and_test:
     name: Build and Run tests
@@ -46,9 +51,9 @@ jobs:
           name: app-jar-artifact
           path: build/libs/auth-profile.jar
 
-  deploy:
+  build_and_push_docker:
     runs-on: ubuntu-latest
-    name: Deploy to EC2
+    name: Build and Push Docker Image
     needs: build_and_test
     if: |
       github.event_name == 'push' && (
@@ -59,20 +64,74 @@ jobs:
       )
 
     steps:
-      - name: Checkout code (for Dockerfile, docker-compose.yml, etc.)
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
           name: app-jar-artifact
-          path: deployment/
+          path: ./
 
-      - name: Determine environment
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ env.DOCKER_HUB_TOKEN }}
+
+      - name: Determine Docker tag
+        id: docker_tag
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "tag=production" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "tag=development" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "tag=staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/production" ]]; then
+            echo "tag=production" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.docker_tag.outputs.tag }}
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            APP_JAR=auth-profile.jar
+          platforms: linux/amd64,linux/arm64
+
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to EC2
+    needs: [build_and_test, build_and_push_docker]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/develop' ||
+        github.ref == 'refs/heads/staging' ||
+        github.ref == 'refs/heads/production'
+      )
+
+    steps:
+      - name: Checkout code (for docker-compose.yml, etc.)
+        uses: actions/checkout@v4
+
+      - name: Determine environment and Docker tag
         id: env
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "environment=production" >> $GITHUB_OUTPUT
+            echo "docker_tag=production" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
             echo "log_level=WARN" >> $GITHUB_OUTPUT
             echo "log_level_app=INFO" >> $GITHUB_OUTPUT
@@ -83,6 +142,7 @@ jobs:
             echo "cpu_limit=1.0" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
             echo "environment=development" >> $GITHUB_OUTPUT
+            echo "docker_tag=development" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-dev" >> $GITHUB_OUTPUT
             echo "log_level=INFO" >> $GITHUB_OUTPUT
             echo "log_level_app=DEBUG" >> $GITHUB_OUTPUT
@@ -93,6 +153,7 @@ jobs:
             echo "cpu_limit=0.5" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "environment=staging" >> $GITHUB_OUTPUT
+            echo "docker_tag=staging" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-staging" >> $GITHUB_OUTPUT
             echo "log_level=INFO" >> $GITHUB_OUTPUT
             echo "log_level_app=INFO" >> $GITHUB_OUTPUT
@@ -103,6 +164,7 @@ jobs:
             echo "cpu_limit=0.75" >> $GITHUB_OUTPUT
           else # Default case
             echo "environment=production" >> $GITHUB_OUTPUT
+            echo "docker_tag=production" >> $GITHUB_OUTPUT
             echo "db_name=auth-profile-prod" >> $GITHUB_OUTPUT
             echo "log_level=WARN" >> $GITHUB_OUTPUT
             echo "log_level_app=INFO" >> $GITHUB_OUTPUT
@@ -113,26 +175,17 @@ jobs:
             echo "cpu_limit=1.0" >> $GITHUB_OUTPUT
           fi
           
-          # MODIFIED: Always use the single RATING_SERVICE_URL secret
           echo "rating_url=${{ secrets.RATING_SERVICE_URL }}" >> $GITHUB_OUTPUT
           
           echo "🌍 Deploying to environment: ${{ steps.env.outputs.environment }}"
+          echo "🐳 Docker tag: ${{ steps.env.outputs.docker_tag }}"
           echo "🗄️  Database name: ${{ steps.env.outputs.db_name }}"
           echo "📡 Rating Service URL: ${{ steps.env.outputs.rating_url }}"
 
       - name: Prepare deployment package
         run: |
-          echo "Contents of deployment/ after JAR download:"
-          ls -l deployment/
-
-          if [ -f "Dockerfile" ]; then
-            cp Dockerfile deployment/Dockerfile
-            echo "Copied existing Dockerfile to deployment/Dockerfile"
-          else
-            echo "Error: Dockerfile not found in repository root. This file is expected to be your runtime Dockerfile."
-            exit 1
-          fi
-
+          mkdir -p deployment
+          
           if [ -f "docker-compose.yml" ]; then
             cp docker-compose.yml deployment/docker-compose.yml
             echo "Copied docker-compose.yml to deployment/"
@@ -152,11 +205,8 @@ jobs:
           echo "BRANCH=${{ github.ref_name }}" >> deployment/.deploy-info
           echo "COMMIT=${{ github.sha }}" >> deployment/.deploy-info
           echo "ENVIRONMENT=${{ steps.env.outputs.environment }}" >> deployment/.deploy-info
+          echo "DOCKER_IMAGE=${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.docker_tag }}" >> deployment/.deploy-info
           echo "DEPLOYED_AT=$(date -u)" >> deployment/.deploy-info
-          
-          echo "--- Contents of deployment directory before taring: ---"
-          ls -R deployment
-          echo "--------------------------------------------------------"
           
           cd deployment
           tar -czf ../pandacare-deployment.tar.gz .
@@ -186,11 +236,11 @@ jobs:
             DEPLOYMENT_DIR="/home/ec2-user/$APP_NAME"
             BACKUP_DIR="/home/ec2-user/${APP_NAME}-backup-$(date +%Y%m%d-%H%M%S)"
             DEPLOYMENT_ARCHIVE="pandacare-deployment.tar.gz"
-            JAR_ARG_NAME_FOR_DOCKERFILE="APP_JAR" 
-            JAR_FILENAME_IN_PACKAGE="auth-profile.jar"
+            DOCKER_IMAGE="${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.docker_tag }}"
 
             echo "🚀 Deploying branch: ${{ github.ref_name }}"
             echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
+            echo "🐳 Docker Image: $DOCKER_IMAGE"
             echo "🗄️  Database: ${{ steps.env.outputs.db_name }}"
             echo "📡 Rating URL for .env: ${{ steps.env.outputs.rating_url }}"
             
@@ -214,6 +264,7 @@ jobs:
             ENVIRONMENT=${{ steps.env.outputs.environment }}
             DEPLOYED_AT=$(date -u)
             COMMIT_SHA=${{ github.sha }}
+            DOCKER_IMAGE=$DOCKER_IMAGE
 
             POSTGRES_DB=${{ steps.env.outputs.db_name }}
             POSTGRES_USER=pandacare_user
@@ -229,7 +280,7 @@ jobs:
             SERVER_PORT=8081
             SPRING_PROFILES_ACTIVE=docker
             
-            RATING_URL=${{ steps.env.outputs.rating_url }} # This now uses the single secret value
+            RATING_URL=${{ steps.env.outputs.rating_url }}
             
             LOGGING_LEVEL_ROOT=${{ steps.env.outputs.log_level }}
             LOGGING_LEVEL_AUTH_PROFILE=${{ steps.env.outputs.log_level_app }}
@@ -257,8 +308,11 @@ jobs:
             echo "🧹 Cleaning up Docker resources..."
             docker system prune -af || true
             
-            echo "🚀 Building image and starting services for ${{ steps.env.outputs.environment }} environment..."
-            docker-compose up --build --build-arg ${JAR_ARG_NAME_FOR_DOCKERFILE}="${JAR_FILENAME_IN_PACKAGE}" -d
+            echo "🐳 Pulling latest Docker image: $DOCKER_IMAGE"
+            docker pull $DOCKER_IMAGE
+            
+            echo "🚀 Starting services for ${{ steps.env.outputs.environment }} environment..."
+            docker-compose up -d
             
             echo "⏳ Waiting for application to start..."
             sleep 90
@@ -281,7 +335,7 @@ jobs:
             
             if [ $attempt -gt $max_attempts ]; then
               echo "❌ Application failed to start properly after $max_attempts attempts."
-              echo "📋 Recent logs for $APP_NAME service (check service name in docker-compose.yml):"
+              echo "📋 Recent logs for $APP_NAME service:"
               docker-compose logs --tail=100 $APP_NAME 
               exit 1
             fi
@@ -299,6 +353,7 @@ jobs:
             echo "🎉 Deployment completed successfully!"
             echo "🌍 Environment: ${{ steps.env.outputs.environment }}"
             echo "🌿 Branch: ${{ github.ref_name }}"
+            echo "🐳 Docker Image: $DOCKER_IMAGE"
 
       - name: Notify deployment status
         if: always()
@@ -313,7 +368,7 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     name: Cleanup Runner
-    needs: [build_and_test, deploy]
+    needs: [build_and_test, build_and_push_docker, deploy]
     if: always()
 
     steps:
