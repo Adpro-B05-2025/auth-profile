@@ -202,6 +202,14 @@ jobs:
             echo "No database/init directory found to copy."
           fi
           
+          if [ -d "monitoring" ]; then
+            mkdir -p deployment/monitoring
+            cp -r monitoring/. deployment/monitoring/
+            echo "Copied monitoring configuration to deployment/monitoring/"
+          else
+            echo "No monitoring directory found to copy."
+          fi
+          
           echo "BRANCH=${{ github.ref_name }}" >> deployment/.deploy-info
           echo "COMMIT=${{ github.sha }}" >> deployment/.deploy-info
           echo "ENVIRONMENT=${{ steps.env.outputs.environment }}" >> deployment/.deploy-info
@@ -296,6 +304,8 @@ jobs:
             
             CONTAINER_MEMORY_LIMIT=${{ steps.env.outputs.memory_limit }}
             CONTAINER_CPU_LIMIT=${{ steps.env.outputs.cpu_limit }}
+            
+            GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
             EOF
             echo ".env file created."
 
@@ -308,14 +318,52 @@ jobs:
             echo "🧹 Cleaning up Docker resources..."
             docker system prune -af || true
             
+            echo "🗄️ Checking for corrupted database volumes..."
+            if docker volume ls | grep -q "postgres_data"; then
+              echo "Found existing postgres volume. Checking if it's healthy..."
+              if docker run --rm -v ${APP_NAME}_postgres_data:/data alpine ls /data | grep -q postgresql.conf; then
+                echo "✅ Database volume appears healthy, keeping it."
+              else
+                echo "⚠️ Database volume appears corrupted, removing it..."
+                docker volume rm ${APP_NAME}_postgres_data || true
+              fi
+            fi
+            
             echo "🐳 Pulling latest Docker image: $DOCKER_IMAGE"
             docker pull $DOCKER_IMAGE
             
             echo "🚀 Starting services for ${{ steps.env.outputs.environment }} environment..."
             docker-compose up -d
             
+            echo "📊 Checking container status..."
+            docker-compose ps
+            
+            echo "🔍 Checking PostgreSQL logs..."
+            docker-compose logs postgres
+            
+            echo "⏳ Waiting for PostgreSQL to be healthy..."
+            timeout=300  # 5 minutes timeout
+            elapsed=0
+            while [ $elapsed -lt $timeout ]; do
+              if docker-compose ps postgres | grep -q "healthy"; then
+                echo "✅ PostgreSQL is healthy!"
+                break
+              elif docker-compose ps postgres | grep -q "unhealthy"; then
+                echo "❌ PostgreSQL is unhealthy. Checking logs..."
+                docker-compose logs --tail=20 postgres
+                break
+              else
+                echo "⏳ Waiting for PostgreSQL health check... (${elapsed}s/${timeout}s)"
+                sleep 10
+                elapsed=$((elapsed + 10))
+              fi
+            done
+            
+            echo "📊 Final container status before app start:"
+            docker-compose ps
+            
             echo "⏳ Waiting for application to start..."
-            sleep 90
+            sleep 60
             
             echo "🏥 Performing health check on http://localhost:8081/actuator/health..."
             max_attempts=10

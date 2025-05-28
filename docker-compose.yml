@@ -17,17 +17,17 @@ services:
       - pandacare-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   auth-profile:
     image: ${DOCKER_IMAGE}  # This will pull from Docker Hub
     container_name: pandacare-auth-profile
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres  # Simple dependency without health check
     environment:
       SPRING_DATASOURCE_URL: ${DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${DATASOURCE_USERNAME}
