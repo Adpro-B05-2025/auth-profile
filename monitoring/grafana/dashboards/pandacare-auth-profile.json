@@ -19,7 +19,7 @@
   "links": [],
   "panels": [
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -100,7 +100,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -159,7 +159,7 @@
       "type": "stat"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -252,7 +252,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -345,7 +345,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -432,7 +432,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -525,7 +525,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -636,7 +636,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -699,7 +699,7 @@
       "type": "stat"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -798,7 +798,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -885,7 +885,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "grafanacloud-farel39-prom",
+      "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
           "color": {
