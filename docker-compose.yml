@@ -15,7 +15,7 @@ services:
       - pandacare-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-pandacare_user} -d ${POSTGRES_DB:-auth-profile}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-pandacare_user} -d ${POSTGRES_DB:-auth-profile-dev}"]
       interval: 10s
       timeout: 5s
       retries: 5
