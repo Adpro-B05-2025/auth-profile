@@ -3,9 +3,9 @@ services:
     image: postgres:15-alpine
     container_name: pandacare-postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-auth-profile}
+      POSTGRES_USER: ${POSTGRES_USER:-pandacare_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
       - "5432:5432"
     volumes:
@@ -15,7 +15,7 @@ services:
       - pandacare-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-pandacare_user} -d ${POSTGRES_DB:-auth-profile}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,25 +25,29 @@ services:
     image: ${DOCKER_IMAGE}
     container_name: pandacare-auth-profile
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy  # Wait for PostgreSQL to be healthy
     environment:
-      SPRING_DATASOURCE_URL: ${DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD}
+      # Fix the database URL to match what's created above
+      SPRING_DATASOURCE_URL: ${DATASOURCE_URL:-jdbc:postgresql://postgres:5432/auth-profile}
+      SPRING_DATASOURCE_USERNAME: ${DATASOURCE_USERNAME:-pandacare_user}
+      SPRING_DATASOURCE_PASSWORD: ${DATASOURCE_PASSWORD:-password}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
-      SERVER_PORT: ${SERVER_PORT}
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      SERVER_PORT: ${SERVER_PORT:-8081}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
       RATING_URL: ${RATING_URL}
-      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT}
-      LOGGING_LEVEL_AUTH_PROFILE: ${LOGGING_LEVEL_AUTH_PROFILE}
-      LOGGING_FILE_NAME: ${LOGGING_FILE_NAME}
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE}
-      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS}
-      MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: ${MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED}
-      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE}
-      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE}
-      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
+      LOGGING_LEVEL_AUTH_PROFILE: ${LOGGING_LEVEL_AUTH_PROFILE:-INFO}
+      LOGGING_FILE_NAME: ${LOGGING_FILE_NAME:-/app/logs/auth-profile.log}
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:-health,prometheus,metrics,info}
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:-when_authorized}
+      MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: ${MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED:-true}
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE:-5}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE:-20}
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: ${SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT:-30000}
+      # Add startup delay to ensure database is ready
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
     ports:
       - "8081:8081"
     volumes:
@@ -54,8 +58,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${CONTAINER_MEMORY_LIMIT}
-          cpus: '${CONTAINER_CPU_LIMIT}'
+          memory: ${CONTAINER_MEMORY_LIMIT:-1G}
+          cpus: '${CONTAINER_CPU_LIMIT:-0.5}'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 30s
@@ -63,6 +67,7 @@ services:
       retries: 3
       start_period: 120s
 
+  # ... rest of your services remain the same ...
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: pandacare-prometheus
@@ -176,12 +181,13 @@ services:
     ports:
       - "9187:9187"
     environment:
-      DATA_SOURCE_NAME: "postgresql://pandacare_user:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-pandacare_user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-auth-profile}?sslmode=disable"
     networks:
       - pandacare-network
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9187/metrics" ]
       interval: 30s
@@ -215,7 +221,7 @@ services:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./logs:/app/logs:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # ⭐ ADD THIS LINE
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: -config.file=/etc/promtail/config.yml
     networks:
       - pandacare-network
