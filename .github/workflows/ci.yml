@@ -1,6 +1,5 @@
-name: Continuous Integration (CI)
+name: Continuous Integration
 
-## Run CI jobs on all branches by default
 on:
   push:
   pull_request:
@@ -12,13 +11,26 @@ jobs:
     steps:
       - name: Check out the Git repository
         uses: actions/checkout@v4
+
       - name: Set up Java toolchain
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "21"
           cache: "gradle"
+
       - name: Add gradlew permission
         run: chmod +x gradlew
+
       - name: Run unit tests
         run: ./gradlew test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.sha }}
+          path: |
+            build/reports/tests/
+            build/test-results/
+          retention-days: 7
