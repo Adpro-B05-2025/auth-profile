@@ -129,13 +129,22 @@ services:
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)'
+      - '--web.max-requests=40'           # Limit concurrent requests
+      - '--web.read-timeout=10s'          # Read timeout
+      - '--web.write-timeout=10s'         # Write timeout
+      - '--log.level=warn'                # Reduce log verbosity
     networks:
       - pandacare-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M                    # Limit memory usage
+          cpus: '0.1'                     # Limit CPU usage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/metrics"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9100/metrics" ]
       interval: 30s
-      timeout: 10s
+      timeout: 15s                       # Increased timeout
       retries: 3
 
   # Container metrics - Docker container stats

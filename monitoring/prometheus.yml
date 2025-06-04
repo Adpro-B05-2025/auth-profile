@@ -31,7 +31,11 @@ scrape_configs:
   # Node Exporter for system metrics
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100']
+        - targets: [ 'node-exporter:9100' ]
+    scrape_interval: 15s        # Increased from 5s (was too frequent)
+    scrape_timeout: 10s         # Increased timeout
+    metrics_path: '/metrics'
+    honor_labels: true
 
   # cAdvisor for container metrics
   - job_name: 'cadvisor'
