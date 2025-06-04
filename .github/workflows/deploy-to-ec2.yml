@@ -236,7 +236,7 @@ jobs:
             JAR_SOURCE=cd_workflow_fresh_build
             JAR_REBUILD=true
 
-            POSTGRES_DB=auth-profile
+            POSTGRES_DB=auth-profile-dev
             POSTGRES_USER=pandacare_user
             POSTGRES_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
             
