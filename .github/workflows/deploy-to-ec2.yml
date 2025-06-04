@@ -240,7 +240,7 @@ jobs:
             POSTGRES_USER=pandacare_user
             POSTGRES_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
             
-            DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth-profile
+            DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth-profile-dev
             DATASOURCE_USERNAME=pandacare_user
             DATASOURCE_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
             
