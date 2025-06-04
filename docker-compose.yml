@@ -210,13 +210,15 @@ services:
       - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - ./logs:/app/logs:ro  # Your application logs
+      - ./logs:/app/logs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # ⭐ ADD THIS LINE
     command: -config.file=/etc/promtail/config.yml
     networks:
       - pandacare-network
     restart: unless-stopped
     depends_on:
       - loki
+    user: "0:0"
 
 volumes:
   postgres_data:
