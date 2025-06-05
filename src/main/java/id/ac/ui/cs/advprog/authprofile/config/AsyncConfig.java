@@ -6,10 +6,35 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration
 @EnableAsync
 public class AsyncConfig {
+
+    private ThreadPoolTaskExecutor createExecutor(
+            int corePoolSize,
+            int maxPoolSize,
+            int queueCapacity,
+            String threadNamePrefix,
+            int keepAliveSeconds,
+            int awaitTerminationSeconds,
+            RejectedExecutionHandler rejectionPolicy) {
+
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(maxPoolSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix(threadNamePrefix);
+        executor.setAllowCoreThreadTimeOut(true);
+        executor.setKeepAliveSeconds(keepAliveSeconds);
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(awaitTerminationSeconds);
+        executor.setRejectedExecutionHandler(rejectionPolicy);
+        executor.initialize();
+        return executor;
+    }
 
     /**
      * Optimized for t2.large EC2 instance with Docker container limits:
@@ -19,33 +44,15 @@ public class AsyncConfig {
      */
     @Bean("searchTaskExecutor")
     public Executor searchTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-
-        // Reduced core pool for container environment (was 10)
-        executor.setCorePoolSize(4);
-
-        // Conservative max pool to prevent CPU oversubscription (was 50)
-        executor.setMaxPoolSize(12);
-
-        // Increased queue to handle bursts without creating threads (was 200)
-        executor.setQueueCapacity(500);
-
-        // Thread naming for monitoring
-        executor.setThreadNamePrefix("Search-");
-
-        // Aggressive core thread timeout to free memory
-        executor.setAllowCoreThreadTimeOut(true);
-        executor.setKeepAliveSeconds(30);
-
-        // Graceful shutdown
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(30);
-
-        // Rejection policy for overload scenarios
-        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
-
-        executor.initialize();
-        return executor;
+        return createExecutor(
+                4,   // corePoolSize (was 10)
+                12,  // maxPoolSize (was 50)
+                500, // queueCapacity (was 200)
+                "Search-",
+                30,  // keepAliveSeconds
+                30,  // awaitTerminationSeconds
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 
     /**
@@ -55,31 +62,15 @@ public class AsyncConfig {
      */
     @Bean("autocompleteTaskExecutor")
     public Executor autocompleteTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-
-        // Minimal core pool for lightweight operations (was 5)
-        executor.setCorePoolSize(2);
-
-        // Small max pool for cached operations (was 15)
-        executor.setMaxPoolSize(6);
-
-        // Moderate queue for suggestion requests (was 50)
-        executor.setQueueCapacity(100);
-
-        executor.setThreadNamePrefix("Autocomplete-");
-
-        // Quick timeout for lightweight operations
-        executor.setAllowCoreThreadTimeOut(true);
-        executor.setKeepAliveSeconds(15);
-
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(15);
-
-        // Fast-fail for overload (suggestions should be quick)
-        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
-
-        executor.initialize();
-        return executor;
+        return createExecutor(
+                2,   // corePoolSize (was 5)
+                6,   // maxPoolSize (was 15)
+                100, // queueCapacity (was 50)
+                "Autocomplete-",
+                15,  // keepAliveSeconds
+                15,  // awaitTerminationSeconds
+                new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
     /**
@@ -89,26 +80,14 @@ public class AsyncConfig {
      */
     @Bean("ratingServiceExecutor")
     public Executor ratingServiceExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-
-        // Small pool for external service calls
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(8);
-        executor.setQueueCapacity(200);
-
-        executor.setThreadNamePrefix("Rating-");
-
-        // Longer timeout for external service calls
-        executor.setAllowCoreThreadTimeOut(true);
-        executor.setKeepAliveSeconds(60);
-
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(45);
-
-        // Retry strategy - caller runs to prevent data loss
-        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
-
-        executor.initialize();
-        return executor;
+        return createExecutor(
+                2,   // corePoolSize
+                8,   // maxPoolSize
+                200, // queueCapacity
+                "Rating-",
+                60,  // keepAliveSeconds
+                45,  // awaitTerminationSeconds
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 }
