@@ -1,0 +1,400 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main, develop ]
+
+env:
+  DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+  DOCKER_HUB_TOKEN: ${{ secrets.DOCKER_HUB_TOKEN }}
+  IMAGE_NAME: pandacare-auth-profile
+
+jobs:
+  wait_for_ci:
+    name: Wait for CI Success
+    runs-on: ubuntu-latest
+    outputs:
+      ci-success: ${{ steps.wait_ci.outputs.conclusion }}
+      ci-run-id: ${{ steps.wait_ci.outputs.run_id }}
+    steps:
+      - name: Wait for CI workflow to complete
+        id: wait_ci
+        uses: fountainhead/action-wait-for-check@v1.2.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "Run tests"
+          ref: ${{ github.sha }}
+          timeoutSeconds: 1800
+          intervalSeconds: 30
+
+      - name: Verify CI Success
+        if: steps.wait_ci.outputs.conclusion != 'success'
+        run: |
+          echo "CI workflow did not succeed!"
+          echo "CI Status: ${{ steps.wait_ci.outputs.conclusion }}"
+          echo "CI Run ID: ${{ steps.wait_ci.outputs.run_id }}"
+          exit 1
+
+      - name: CI Success Confirmed
+        run: |
+          echo "CI workflow completed successfully!"
+          echo "CI Status: ${{ steps.wait_ci.outputs.conclusion }}"
+          echo "CI Run ID: ${{ steps.wait_ci.outputs.run_id }}"
+          echo "Proceeding with CD pipeline..."
+
+  build_and_push_docker:
+    name: Build JAR & Push Docker
+    runs-on: ubuntu-latest
+    needs: wait_for_ci
+    if: needs.wait_for_ci.outputs.ci-success == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java toolchain
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Add gradlew permission
+        run: chmod +x gradlew
+
+      - name: Build Spring Boot JAR (after CI tests pass)
+        run: |
+          echo "Building JAR for deployment after CI success..."
+          ./gradlew bootJar
+
+      - name: Rename JAR for consistency
+        run: |
+          jar_file=$(find build/libs -name '*.jar' -type f -print -quit)
+          if [[ -z "$jar_file" ]]; then
+            echo "Error: No JAR file found in build/libs. Make sure './gradlew bootJar' produces a JAR."
+            exit 1
+          fi
+          mv "$jar_file" auth-profile.jar
+          echo "Renamed JAR to auth-profile.jar"
+          echo "JAR size: $(du -h auth-profile.jar | cut -f1)"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ env.DOCKER_HUB_TOKEN }}
+
+      - name: Use branch name as Docker tag
+        id: docker_tag
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          DOCKER_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+          echo "tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
+          echo "Docker tag: $DOCKER_TAG"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.docker_tag.outputs.tag }}
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            APP_JAR=auth-profile.jar
+          platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            jar.build.source=cd_workflow
+            jar.rebuild=true
+            ci.run.id=${{ needs.wait_for_ci.outputs.ci-run-id }}
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [wait_for_ci, build_and_push_docker]
+    if: |
+      needs.wait_for_ci.outputs.ci-success == 'success' &&
+      needs.build_and_push_docker.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: env
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          DOCKER_TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g' | tr '[:upper:]' '[:lower:]')
+          
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "docker_tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
+          echo "rating_url=${{ secrets.RATING_SERVICE_URL }}" >> $GITHUB_OUTPUT
+          
+          echo "Deploying branch: $BRANCH_NAME"
+          echo "Docker tag: $DOCKER_TAG"
+
+      - name: Prepare deployment package
+        run: |
+          mkdir -p deployment
+          
+          if [ -f "docker-compose.yml" ]; then
+            cp docker-compose.yml deployment/docker-compose.yml
+          else
+            echo "Error: docker-compose.yml not found in repository root."
+            exit 1
+          fi
+          
+          if [ -d "database/init" ]; then
+            mkdir -p deployment/database/init
+            cp -r database/init/. deployment/database/init/
+          fi
+          
+          if [ -d "monitoring" ]; then
+            mkdir -p deployment/monitoring
+            cp -r monitoring/. deployment/monitoring/
+          fi
+          
+          cat > deployment/.deploy-info << EOF
+          BRANCH=${{ github.ref_name }}
+          COMMIT=${{ github.sha }}
+          DOCKER_IMAGE=${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.docker_tag }}
+          DEPLOYED_AT=$(date -u)
+          CI_TESTS_PASSED=true
+          CI_RUN_ID=${{ needs.wait_for_ci.outputs.ci-run-id }}
+          CD_RUN_ID=${{ github.run_id }}
+          JAR_SOURCE=cd_workflow_fresh_build
+          JAR_REBUILD=true
+          EOF
+          
+          cd deployment
+          tar -czf ../pandacare-deployment.tar.gz .
+          cd ..
+
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "pandacare-deployment.tar.gz"
+          target: "/home/ec2-user/"
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ec2-user
+            
+            APP_NAME="auth-profile"
+            DEPLOYMENT_DIR="/home/ec2-user/$APP_NAME"
+            BACKUP_DIR="/home/ec2-user/${APP_NAME}-backup-$(date +%Y%m%d-%H%M%S)"
+            DEPLOYMENT_ARCHIVE="pandacare-deployment.tar.gz"
+            DOCKER_IMAGE="${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.docker_tag }}"
+
+            echo "🚀 DEPLOYMENT STARTING"
+            echo "Branch: ${{ steps.env.outputs.branch_name }}"
+            echo "Docker Image: $DOCKER_IMAGE"
+            echo "Commit SHA: ${{ github.sha }}"
+            echo "JAR built fresh in CD workflow (after CI tests passed)"
+            
+            FIRST_DEPLOYMENT=false
+            if [ ! -d "$DEPLOYMENT_DIR" ]; then
+              FIRST_DEPLOYMENT=true
+              echo "🆕 First deployment detected"
+            else
+              echo "🔄 Update deployment detected"
+            fi
+            
+            if [ -d "$DEPLOYMENT_DIR" ] && [ "$FIRST_DEPLOYMENT" = false ]; then
+              echo "💾 Creating backup: $BACKUP_DIR"
+              cp -r "$DEPLOYMENT_DIR" "$BACKUP_DIR" || echo "Warning: Failed to create backup"
+            fi
+            
+            echo "📦 Extracting deployment package..."
+            mkdir -p "$DEPLOYMENT_DIR"
+            tar -xzf "$DEPLOYMENT_ARCHIVE" -C "$DEPLOYMENT_DIR"
+            cd "$DEPLOYMENT_DIR"
+            
+            echo "⚙️ Creating environment configuration..."
+            cat > .env << EOF
+            BRANCH=${{ steps.env.outputs.branch_name }}
+            DEPLOYED_AT=$(date -u)
+            COMMIT_SHA=${{ github.sha }}
+            DOCKER_IMAGE=$DOCKER_IMAGE
+            CI_TESTS_PASSED=true
+            CI_RUN_ID=${{ needs.wait_for_ci.outputs.ci-run-id }}
+            CD_RUN_ID=${{ github.run_id }}
+            JAR_SOURCE=cd_workflow_fresh_build
+            JAR_REBUILD=true
+
+            POSTGRES_DB=auth-profile-dev
+            POSTGRES_USER=pandacare_user
+            POSTGRES_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
+            
+            DATASOURCE_URL=jdbc:postgresql://postgres:5432/auth-profile-dev
+            DATASOURCE_USERNAME=pandacare_user
+            DATASOURCE_PASSWORD=${{ secrets.DATASOURCE_PASSWORD }}
+            
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRATION_MS=${{ secrets.JWT_EXPIRATION_MS }}
+            
+            SERVER_PORT=8081
+            SPRING_PROFILES_ACTIVE=docker
+            RATING_URL=${{ steps.env.outputs.rating_url }}
+            
+            LOGGING_LEVEL_ROOT=INFO
+            LOGGING_LEVEL_AUTH_PROFILE=INFO
+            LOGGING_FILE_NAME=/app/logs/auth-profile.log
+            
+            MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus,metrics,info
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=when_authorized
+            MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+              
+            CONTAINER_MEMORY_LIMIT=1G
+            CONTAINER_CPU_LIMIT=0.5
+            
+            GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+            EOF
+            
+            mkdir -p logs
+            
+            if [ "$FIRST_DEPLOYMENT" = true ]; then
+              echo "🆕 FIRST DEPLOYMENT - Starting all services"
+              docker-compose pull
+              docker-compose up -d
+              sleep 90
+            else
+              echo "🔄 UPDATE DEPLOYMENT - Rolling update"
+              docker-compose ps
+              echo "🐳 Pulling new application image: $DOCKER_IMAGE"
+              docker-compose pull auth-profile
+            
+              if docker-compose ps --services --filter "status=running" | grep -q "auth-profile"; then
+                echo "📱 Application is running, performing rolling update..."
+                OLD_CONTAINER_ID=$(docker-compose ps -q auth-profile)
+                echo "🔍 Current container ID: $OLD_CONTAINER_ID"
+                docker-compose up -d --no-deps --force-recreate auth-profile
+                sleep 10
+                NEW_CONTAINER_ID=$(docker-compose ps -q auth-profile)
+                echo "🆕 New container ID: $NEW_CONTAINER_ID"
+                if [ "$OLD_CONTAINER_ID" != "$NEW_CONTAINER_ID" ]; then
+                  echo "✅ Container successfully recreated"
+                else
+                  echo "⚠️ Warning: Container ID unchanged"
+                fi
+              else
+                echo "📱 Application not running, starting from scratch..."
+                docker-compose up -d auth-profile
+              fi
+            
+              echo "🔧 Ensuring all supporting services are running..."
+              docker-compose up -d
+              echo "🧹 Cleaning up old Docker images..."
+              docker image prune -f --filter "until=24h" || true
+            fi
+            
+            echo "🏥 Waiting for application health check..."
+            max_attempts=20
+            attempt=1
+            HEALTH_CHECK_URL="http://localhost:8081/actuator/health"
+
+            while [ $attempt -le $max_attempts ]; do
+              if curl -sf "$HEALTH_CHECK_URL" > /dev/null 2>&1; then
+                echo "✅ Application health check passed!"
+                curl -s "$HEALTH_CHECK_URL" | jq '.' || curl -s "$HEALTH_CHECK_URL"
+                break
+              else
+                echo "⏳ Health check attempt $attempt/$max_attempts failed, retrying in 10s..."
+                if [ $attempt -eq 5 ] || [ $attempt -eq 10 ] || [ $attempt -eq 15 ]; then
+                  echo "📋 Application logs (last 20 lines):"
+                  docker-compose logs --tail=20 auth-profile
+                fi
+                sleep 10
+                attempt=$((attempt + 1))
+              fi
+            done
+            
+            if [ $attempt -gt $max_attempts ]; then
+              echo "❌ Application failed health check after $max_attempts attempts"
+              docker-compose logs --tail=50 auth-profile
+              docker-compose ps
+              exit 1
+            fi
+            
+            echo "📊 Final service status:"
+            docker-compose ps
+            
+            echo "🔍 Container creation times:"
+            for service in auth-profile postgres prometheus grafana; do
+              if docker-compose ps $service | grep -q "Up"; then
+                created_time=$(docker inspect $(docker-compose ps -q $service) | jq -r '.[0].Created' | cut -d'T' -f1,2 | tr 'T' ' ')
+                echo "  $service: $created_time"
+              fi
+            done
+            
+            response_time=$(curl -w "%{time_total}" -s -o /dev/null "http://localhost:8081/actuator/health")
+            echo "⚡ Health endpoint response time: ${response_time}s"
+            
+            docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" $(docker-compose ps -q) | head -10
+            
+            echo ""
+            echo "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+            echo "✨ Pipeline Summary:"
+            echo "  ✅ CI tests passed first"
+            echo "  ✅ JAR built fresh in CD workflow"
+            echo "  ✅ Docker image pushed with new JAR"
+            echo "  ✅ Application deployed and healthy"
+            echo "  🌍 Branch: ${{ steps.env.outputs.branch_name }}"
+            echo "  🐳 Image: $DOCKER_IMAGE"
+            echo "  📅 Deployed at: $(date -u)"
+
+      - name: Deployment Summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "## ✅ Deployment Successful! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch:** ${{ steps.env.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Docker Image:** ${{ env.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.docker_tag }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🎯 Build Process:" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ CI tests passed first" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ JAR built fresh in CD workflow" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ No duplicate builds" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Single source of truth for deployment" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**CI Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ needs.wait_for_ci.outputs.ci-run-id }}" >> $GITHUB_STEP_SUMMARY
+            echo "**CD Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**CI Status:** ${{ needs.wait_for_ci.outputs.ci-success }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Build Status:** ${{ needs.build_and_push_docker.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [wait_for_ci, build_and_push_docker, deploy]
+    if: always()
+
+    steps:
+      - name: Cleanup runner workspace
+        run: |
+          echo "🧹 GitHub Actions runner workspace cleanup completed."
+          echo "📊 Pipeline Summary:"
+          echo "  - CI Workflow: ${{ needs.wait_for_ci.outputs.ci-success }}"
+          echo "  - CD Build: ${{ needs.build_and_push_docker.result }}"
+          echo "  - CD Deploy: ${{ needs.deploy.result }}"
+          echo "  - Branch: ${{ github.ref_name }}"
+          echo "  - JAR: Built once in CD after CI success"

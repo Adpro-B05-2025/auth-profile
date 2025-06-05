@@ -28,6 +28,30 @@ public class RatingServiceImpl implements IRatingService {
 
     private static final Logger logger = LoggerFactory.getLogger(RatingServiceImpl.class);
 
+    // Constants for monitoring metrics to avoid duplication
+    private static final String OPERATION_TAG = "operation";
+    private static final String GET_RATINGS_OPERATION = "get_ratings";
+    private static final String REASON_TAG = "reason";
+    private static final String CLIENT_ERROR_REASON = "client_error";
+    private static final String STATUS_TAG = "status";
+    private static final String HEALTHY_STATUS = "healthy";
+    private static final String UNHEALTHY_STATUS = "unhealthy";
+
+    // Metric names
+    private static final String RATING_REQUESTS_TOTAL = "rating_requests_total";
+    private static final String RATING_REQUESTS_SUCCESSFUL = "rating_requests_successful";
+    private static final String RATING_REQUESTS_FAILED = "rating_requests_failed";
+    private static final String RATING_SUMMARY_REQUESTS_TOTAL = "rating_summary_requests_total";
+    private static final String RATING_SUMMARY_REQUESTS_SUCCESSFUL = "rating_summary_requests_successful";
+    private static final String RATING_SUMMARY_REQUESTS_FAILED = "rating_summary_requests_failed";
+    private static final String RATING_SERVICE_HEALTH_CHECKS = "rating_service_health_checks";
+    private static final String RATING_CACHE_UPDATES_SUCCESSFUL = "rating_cache_updates_successful";
+    private static final String RATING_CACHE_UPDATES_FAILED = "rating_cache_updates_failed";
+    private static final String RATING_BULK_CACHE_UPDATES_TOTAL = "rating_bulk_cache_updates_total";
+    private static final String RATING_BULK_CACHE_UPDATES_SUCCESSFUL = "rating_bulk_cache_updates_successful";
+    private static final String RATING_BULK_CACHE_UPDATES_FAILED = "rating_bulk_cache_updates_failed";
+    private static final String RATING_BULK_CACHE_UPDATES_ERRORS = "rating_bulk_cache_updates_errors";
+
     private final RatingClientService ratingClientService;
     private final CareGiverRepository careGiverRepository;
     private final UserRepository userRepository;
@@ -50,23 +74,23 @@ public class RatingServiceImpl implements IRatingService {
         logger.debug("Getting ratings for doctor ID: {}", doctorId);
 
         // Record rating request
-        monitoringConfig.meterRegistry.counter("rating_requests_total",
-                Tags.of("operation", "get_ratings")).increment();
+        monitoringConfig.meterRegistry.counter(RATING_REQUESTS_TOTAL,
+                Tags.of(OPERATION_TAG, GET_RATINGS_OPERATION)).increment();
 
         try {
             List<RatingResponseDto> ratings = ratingClientService.getRatingsByDoctorId(doctorId);
 
             // Record success
-            monitoringConfig.meterRegistry.counter("rating_requests_successful",
-                    Tags.of("operation", "get_ratings")).increment();
+            monitoringConfig.meterRegistry.counter(RATING_REQUESTS_SUCCESSFUL,
+                    Tags.of(OPERATION_TAG, GET_RATINGS_OPERATION)).increment();
 
             logger.debug("Retrieved {} ratings for doctor ID: {}", ratings.size(), doctorId);
             return ratings;
 
         } catch (Exception e) {
             // Record failure
-            monitoringConfig.meterRegistry.counter("rating_requests_failed",
-                    Tags.of("operation", "get_ratings", "reason", "client_error")).increment();
+            monitoringConfig.meterRegistry.counter(RATING_REQUESTS_FAILED,
+                    Tags.of(OPERATION_TAG, GET_RATINGS_OPERATION, REASON_TAG, CLIENT_ERROR_REASON)).increment();
 
             logger.error("Failed to get ratings for doctor ID: {}", doctorId, e);
             throw e;
@@ -80,7 +104,7 @@ public class RatingServiceImpl implements IRatingService {
         logger.debug("Getting rating summary for doctor ID: {}", doctorId);
 
         // Record summary request
-        monitoringConfig.meterRegistry.counter("rating_summary_requests_total").increment();
+        monitoringConfig.meterRegistry.counter(RATING_SUMMARY_REQUESTS_TOTAL).increment();
 
         try {
             RatingClientService.RatingSummary summary = ratingClientService.getRatingSummary(doctorId);
@@ -91,7 +115,7 @@ public class RatingServiceImpl implements IRatingService {
             );
 
             // Record success
-            monitoringConfig.meterRegistry.counter("rating_summary_requests_successful").increment();
+            monitoringConfig.meterRegistry.counter(RATING_SUMMARY_REQUESTS_SUCCESSFUL).increment();
 
             logger.debug("Rating summary for doctor {}: avg={}, total={}",
                     doctorId, response.getAverageRating(), response.getTotalRatings());
@@ -100,7 +124,7 @@ public class RatingServiceImpl implements IRatingService {
 
         } catch (Exception e) {
             // Record failure
-            monitoringConfig.meterRegistry.counter("rating_summary_requests_failed").increment();
+            monitoringConfig.meterRegistry.counter(RATING_SUMMARY_REQUESTS_FAILED).increment();
 
             logger.error("Failed to get rating summary for doctor ID: {}", doctorId, e);
             // Return empty summary instead of throwing exception
@@ -142,8 +166,8 @@ public class RatingServiceImpl implements IRatingService {
         boolean healthy = ratingClientService.isRatingServiceHealthy();
 
         // Record health check result
-        monitoringConfig.meterRegistry.counter("rating_service_health_checks",
-                Tags.of("status", healthy ? "healthy" : "unhealthy")).increment();
+        monitoringConfig.meterRegistry.counter(RATING_SERVICE_HEALTH_CHECKS,
+                Tags.of(STATUS_TAG, healthy ? HEALTHY_STATUS : UNHEALTHY_STATUS)).increment();
 
         return healthy;
     }
@@ -167,13 +191,13 @@ public class RatingServiceImpl implements IRatingService {
             careGiverRepository.save(caregiver);
 
             // Record cache update
-            monitoringConfig.meterRegistry.counter("rating_cache_updates_successful").increment();
+            monitoringConfig.meterRegistry.counter(RATING_CACHE_UPDATES_SUCCESSFUL).increment();
 
             logger.info("Updated rating cache for caregiver {}: avg={}, count={}",
                     caregiverId, summary.getAverageRating(), summary.getTotalRatings());
 
         } catch (Exception e) {
-            monitoringConfig.meterRegistry.counter("rating_cache_updates_failed").increment();
+            monitoringConfig.meterRegistry.counter(RATING_CACHE_UPDATES_FAILED).increment();
             logger.error("Failed to update rating cache for caregiver: {}", caregiverId, e);
         }
     }
@@ -194,13 +218,15 @@ public class RatingServiceImpl implements IRatingService {
                     totalCaregivers, result.successCount(), result.failureCount());
 
             // Record bulk update metrics
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_total").increment(totalCaregivers);
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_successful").increment(result.successCount());
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_failed").increment(result.failureCount());
+
+            monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_TOTAL).increment(totalCaregivers);
+            monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_SUCCESSFUL).increment(result.successCount());
+            monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_FAILED).increment(result.failureCount());
+
 
         } catch (Exception e) {
             logger.error("Failed to perform bulk rating cache update", e);
-            monitoringConfig.meterRegistry.counter("rating_bulk_cache_updates_errors").increment();
+            monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_ERRORS).increment();
         }
     }
 

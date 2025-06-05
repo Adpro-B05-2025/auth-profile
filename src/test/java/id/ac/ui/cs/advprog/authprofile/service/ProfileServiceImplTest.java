@@ -225,10 +225,6 @@ class ProfileServiceImplTest {
         SecurityContextHolder.setContext(securityContext);
     }
 
-    private void clearSecurityContext() {
-        SecurityContextHolder.clearContext();
-    }
-
     @Test
     void getCurrentUserProfile_ShouldReturnProfileResponse() {
         // Set up security context for this specific test

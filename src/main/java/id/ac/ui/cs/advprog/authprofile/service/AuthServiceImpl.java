@@ -74,6 +74,7 @@ public class AuthServiceImpl implements IAuthService {
         this.monitoringConfig = monitoringConfig;
     }
 
+
     @Override
     @Timed(value = "auth_login_duration", description = "Time taken to authenticate user")
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
@@ -81,8 +82,6 @@ public class AuthServiceImpl implements IAuthService {
 
         // Increment login attempts counter
         monitoringConfig.getLoginAttempts().increment();
-
-        Timer.Sample sample = Timer.start(monitoringConfig.meterRegistry);
 
         try {
             Authentication authentication = authenticationManager.authenticate(
@@ -122,9 +121,6 @@ public class AuthServiceImpl implements IAuthService {
             monitoringConfig.getLoginFailed().increment();
             logger.error("Authentication failed for email: {} - {}", loginRequest.getEmail(), e.getMessage());
             throw e;
-        } finally {
-            sample.stop(monitoringConfig.meterRegistry.timer("auth_login_duration",
-                    "status", "completed"));
         }
     }
 
