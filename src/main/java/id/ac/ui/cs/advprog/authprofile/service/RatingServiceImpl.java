@@ -218,9 +218,11 @@ public class RatingServiceImpl implements IRatingService {
                     totalCaregivers, result.successCount(), result.failureCount());
 
             // Record bulk update metrics
+
             monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_TOTAL).increment(totalCaregivers);
             monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_SUCCESSFUL).increment(result.successCount());
             monitoringConfig.meterRegistry.counter(RATING_BULK_CACHE_UPDATES_FAILED).increment(result.failureCount());
+
 
         } catch (Exception e) {
             logger.error("Failed to perform bulk rating cache update", e);
